@@ -65,38 +65,52 @@ def format_response(lang, key, **kwargs):
     except Exception:
         return message
 
-def register_tool(mcp, tool_key, func):
+def _build_localized_signature(func, alias_map):
+    sig = inspect.signature(func)
+    localized_params = []
+    reverse_alias_map = {}
+
+    for param in sig.parameters.values():
+        if param.name == "lang":
+            continue
+        localized_name = alias_map.get(param.name, param.name)
+        reverse_alias_map[localized_name] = param.name
+        localized_params.append(param.replace(name=localized_name))
+
+    return sig.replace(parameters=localized_params), reverse_alias_map
+
+def register_tool(mcp, tool_key, func, param_aliases=None):
     """
     Registers a tool for both German and English if defined in i18n.json.
-    Preserves the function signature while injecting the 'lang' parameter.
+    Supports localized parameter names through i18n metadata or explicit aliases.
     """
     i18n = load_i18n()
-    
-    de = i18n.get("de", {}).get("tools", {}).get(tool_key)
-    en = i18n.get("en", {}).get("tools", {}).get(tool_key)
-    
-    # Get original signature
-    sig = inspect.signature(func)
-    params = list(sig.parameters.values())
-    # Create new signature without 'lang'
-    params_no_lang = [p for p in params if p.name != 'lang']
-    new_sig = sig.replace(parameters=params_no_lang)
 
-    def create_wrapper(target_lang):
+    def create_wrapper(target_lang, config):
+        alias_map = {}
+        if config:
+            alias_map.update(config.get("param_aliases", {}))
+        if param_aliases:
+            alias_map.update(param_aliases.get(target_lang, {}))
+
+        localized_sig, reverse_alias_map = _build_localized_signature(func, alias_map)
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            return func(*args, lang=target_lang, **kwargs)
-        wrapper.__signature__ = new_sig
+            bound = localized_sig.bind_partial(*args, **kwargs)
+            canonical_kwargs = {
+                reverse_alias_map.get(name, name): value
+                for name, value in bound.arguments.items()
+            }
+            return func(lang=target_lang, **canonical_kwargs)
+        wrapper.__signature__ = localized_sig
         return wrapper
 
-    if de:
-        name = de.get("name")
-        desc = de.get("description", "")
+    for lang in ("de", "en"):
+        config = i18n.get(lang, {}).get("tools", {}).get(tool_key)
+        if not config:
+            continue
+        name = config.get("name")
+        desc = config.get("description", "")
         if name:
-            mcp.tool(name=name, description=desc)(create_wrapper("de"))
-                
-    if en:
-        name = en.get("name")
-        desc = en.get("description", "")
-        if name:
-            mcp.tool(name=name, description=desc)(create_wrapper("en"))
+            mcp.tool(name=name, description=desc)(create_wrapper(lang, config))

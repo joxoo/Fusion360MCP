@@ -1,0 +1,203 @@
+version: 1
+name: FusionMCP Smoke Test
+purpose: >
+  Schnelltest fuer KI-Agenten, um die grundlegende Funktionsfaehigkeit von
+  Bridge, MCP, Basis-Geometrie, lokalisierter Skizzen-API und Analyse zu pruefen.
+
+prerequisites:
+  - Fusion 360 is running
+  - FusionMCP add-in is active
+  - MCP server is running
+
+abort_rules:
+  - if_step_fails: bridge_check
+    reason: Bridge not reachable
+  - if_step_fails: mcp_check
+    reason: MCP not reachable
+  - if_step_fails: create_box
+    reason: No reliable geometry baseline for later checks
+
+success_criteria:
+  - All mandatory steps complete without parameter errors
+  - At least one body is created in Fusion
+  - At least one sketch with a polygon is created successfully
+  - Analysis returns plausible body data
+
+report_format:
+  title: FusionMCP Smoke-Test
+  fields:
+    - result
+    - bridge
+    - mcp
+    - created_bodies
+    - created_sketches
+    - analysis_response
+    - notes
+
+steps:
+  - id: bridge_check
+    type: http
+    method: GET
+    target: http://localhost:8082
+    expected:
+      response_type: json
+      contains:
+        - status
+    required: true
+
+  - id: mcp_check
+    type: http
+    method: GET
+    target: http://localhost:8081/mcp
+    expected:
+      response_type: json
+      contains:
+        status: mcp_server_online
+    required: true
+
+  - id: new_design
+    type: mcp_tool
+    tool:
+      de: neue_konstruktion
+      en: create_new_design
+    args: {}
+    expected:
+      response_contains_any:
+        - Dokument erstellt.
+        - Design created.
+    required: true
+
+  - id: cleanup_before_test
+    type: mcp_tool
+    tool:
+      de: design_bereinigen
+      en: cleanup_design
+    args: {}
+    expected:
+      response_contains_any:
+        - Entwurf bereinigt.
+        - Design cleaned up.
+    required: true
+
+  - id: create_box
+    type: mcp_tool
+    tool:
+      de: box_erstellen
+      en: create_box
+    args:
+      l: 10
+      w: 10
+      h: 5
+      name: SmokeBox
+      x: 0
+      y: 0
+      z: 0
+    expected:
+      response_contains_any:
+        - "Box 'SmokeBox' erstellt."
+        - "Box 'SmokeBox' created."
+      fusion_visible:
+        body_names:
+          - SmokeBox
+    required: true
+
+  - id: create_sketch_de
+    type: mcp_tool
+    tool:
+      de: skizze_erstellen
+    args:
+      name: SmokeSketch
+      ebene: XY
+    expected:
+      response_contains: "Skizze 'SmokeSketch' erstellt."
+      fusion_visible:
+        sketch_names:
+          - SmokeSketch
+    required: true
+
+  - id: draw_polygon_de
+    type: mcp_tool
+    tool:
+      de: polygon_zeichnen
+    args:
+      skizzen_name: SmokeSketch
+      center_x: 10
+      center_y: 10
+      radius: 3
+      seiten: 6
+    expected:
+      response_contains: "Polygon (6 Seiten) gezeichnet."
+      fusion_visible:
+        sketch_name: SmokeSketch
+        contains_shape: closed_hexagon
+    required: true
+
+  - id: draw_circle_de
+    type: mcp_tool
+    tool:
+      de: kreis_zeichnen
+    args:
+      skizzen_name: SmokeSketch
+      center_x: 20
+      center_y: 10
+      radius: 2
+    expected:
+      response_contains: Kreis gezeichnet.
+    required: true
+
+  - id: analyze_bodies
+    type: mcp_tool
+    tool:
+      de: koerper_analysieren
+      en: analyze_bodies
+    args: {}
+    expected:
+      response_type: json_or_json_string
+      body_names_include:
+        - SmokeBox
+    required: true
+
+  - id: create_sketch_en_optional
+    type: mcp_tool
+    tool:
+      en: create_sketch
+    args:
+      name: SmokeSketchEN
+      plane: XY
+    expected:
+      response_contains: "Sketch 'SmokeSketchEN' created."
+    required: false
+
+  - id: draw_polygon_en_optional
+    type: mcp_tool
+    tool:
+      en: draw_polygon
+    args:
+      sketch_name: SmokeSketchEN
+      center_x: 5
+      center_y: 5
+      radius: 2
+      sides: 5
+    expected:
+      response_contains: "Polygon (5 sides) drawn."
+    required: false
+
+  - id: cleanup_after_test
+    type: mcp_tool
+    tool:
+      de: design_bereinigen
+      en: cleanup_design
+    args: {}
+    expected:
+      response_contains_any:
+        - Entwurf bereinigt.
+        - Design cleaned up.
+    required: true
+
+notes:
+  - >
+    The MCP status endpoint at /mcp is a status/info route. Actual MCP transport
+    uses the SSE and messages endpoints returned by that route.
+  - >
+    Visible Fusion checks are still required. A textual MCP success response alone
+    is not sufficient for a passed result.
