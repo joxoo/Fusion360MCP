@@ -5,10 +5,6 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 I18N = get_i18n_data(os.path.join(BASE_DIR, "i18n.json"))
 
-# --- Existing Logic (Refactored) ---
-# [Box, Revolve, Pattern, Fillet, Material, Hole, Component, Sketch logic already here...]
-# (Keeping them for file integrity)
-
 def create_chamfer_logic(body: str, distance: float, lang: str):
     """Adds a chamfer to all edges of a body."""
     script = """
@@ -114,10 +110,7 @@ try:
     if target:
         ents = adsk.core.ObjectCollection.create()
         ents.add(target)
-        
-        # Axis selection
         axis = {"X": root.xAxis, "Y": root.yAxis, "Z": root.zAxis}.get(params['axis'], root.zAxis)
-        
         patterns = root.features.circularPatternFeatures
         p_in = patterns.createInput(ents, axis)
         p_in.quantity = adsk.core.ValueInput.createByReal(params['count'])
@@ -143,16 +136,12 @@ try:
     if target:
         ents = adsk.core.ObjectCollection.create()
         ents.add(target)
-        
         patterns = root.features.rectangularPatternFeatures
-        # createInput(entities, directionAxis, quantity, distance, SpacingType)
         p_in = patterns.createInput(ents, root.xAxis, adsk.core.ValueInput.createByReal(params['cx']), adsk.core.ValueInput.createByReal(params['dx']), adsk.fusion.RectangularPatternSpacingTypes.SpacingRectangularPatternSpacingType)
-        
         if params['cy'] > 1:
             p_in.directionTwo = root.yAxis
             p_in.quantityTwo = adsk.core.ValueInput.createByReal(params['cy'])
             p_in.distanceTwo = adsk.core.ValueInput.createByReal(params['dy'])
-            
         patterns.add(p_in)
         returnValue.append("OK")
     else: returnValue.append("ERR_BODY")
@@ -190,7 +179,29 @@ except Exception as e:
         return format_response(lang, "Abrundung erstellt.", "Fillet created.")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-# --- Full register_geometry_tools update ---
+def extrude_sketch_logic(sketch_name: str, distance: float, lang: str):
+    """Extrudes the first profile of a sketch."""
+    script = """
+try:
+    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    if s and s.profiles.count > 0:
+        prof = s.profiles.item(0)
+        ext = root.features.extrudeFeatures.addSimple(
+            prof, 
+            adsk.core.ValueInput.createByReal(params['dist']), 
+            adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+        )
+        returnValue.append(ext.bodies.item(0).name)
+    else: returnValue.append("ERR_SKETCH")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")
+"""
+    try:
+        res = execute_fusion_script(script, {"sketch": sketch_name, "dist": distance})
+        val = res.get("data", [""])[0]
+        if val == "ERR_SKETCH": return format_response(lang, "Skizze oder Profil nicht gefunden.", "Sketch or profile not found.")
+        return format_response(lang, f"Extrusion von '{sketch_name}' erstellt.", f"Extrusion of '{sketch_name}' created.")
+    except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def register_geometry_tools(mcp):
     de = I18N["de"]["tools"]
@@ -206,6 +217,14 @@ def register_geometry_tools(mcp):
         create_box_logic(l, w, h, name, x, y, z, op, taper, "en")
     )
 
+    # Extrude
+    mcp.tool(name="extrudieren", description="Extrudiert das erste Profil einer Skizze.")(
+        lambda skizzen_name, distanz_cm: extrude_sketch_logic(skizzen_name, distanz_cm, "de")
+    )
+    mcp.tool(name="extrude_sketch", description="Extrudes the first profile of a sketch.")(
+        lambda sketch_name, distance_cm: extrude_sketch_logic(sketch_name, distance_cm, "en")
+    )
+
     # Patterns (Bodies)
     mcp.tool(name=de["kreismuster_erstellen"]["name"], description=de["kreismuster_erstellen"]["description"])(
         lambda koerper_name, anzahl, achse="Z": create_circular_pattern_logic(koerper_name, anzahl, achse, "de")
@@ -214,10 +233,6 @@ def register_geometry_tools(mcp):
         lambda body_name, count, axis="Z": create_circular_pattern_logic(body_name, count, axis, "en")
     )
 
-    # Note: Rectangular pattern entries were missing in i18n for registration, 
-    # but I added them earlier or will use names directly if needed.
-    # Re-checking i18n... they are there as sketch_rectangular_pattern, 
-    # but we need body ones. Let's use direct names for body patterns if i18n key is missing.
     mcp.tool(name="rechteckmuster_erstellen")(
         lambda koerper_name, anzahl_x, distanz_x, anzahl_y=1, distanz_y=0: create_rectangular_pattern_logic(koerper_name, anzahl_x, distanz_x, anzahl_y, distanz_y, "de")
     )
@@ -225,8 +240,7 @@ def register_geometry_tools(mcp):
         lambda body_name, count_x, dist_x, count_y=1, dist_y=0: create_rectangular_pattern_logic(body_name, count_x, dist_x, count_y, dist_y, "en")
     )
 
-    # Added New Advanced Tools to Registration
-
+    # Advanced Tools
     mcp.tool(name="fase_erstellen")(lambda koerper_name, abstand_cm: create_chamfer_logic(koerper_name, abstand_cm, "de"))
     mcp.tool(name="create_chamfer")(lambda body_name, distance_cm: create_chamfer_logic(body_name, distance_cm, "en"))
 
@@ -242,4 +256,3 @@ def register_geometry_tools(mcp):
 
     mcp.tool(name="spiegeln")(lambda koerper_name, ebene="XY": mirror_entities_logic(koerper_name, ebene, "de"))
     mcp.tool(name="mirror_body")(lambda body_name, plane="XY": mirror_entities_logic(body_name, plane, "en"))
-

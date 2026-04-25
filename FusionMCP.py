@@ -64,14 +64,14 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
             app.log('Handler Fatal Error: ' + traceback.format_exc())
             completion_event.set()
 
-class McpHttpHandler(BaseHTTPRequestHandler):
+class BridgeHttpHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): pass # Mute console noise
 
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.end_headers()
-        status = {"status": "online", "version": "v9", "queue_size": task_queue.qsize()}
+        status = {"status": "bridge_online", "version": "v9", "queue_size": task_queue.qsize()}
         self.wfile.write(json.dumps(status).encode('utf-8'))
 
     def do_POST(self):
@@ -104,7 +104,7 @@ class McpHttpHandler(BaseHTTPRequestHandler):
 def run_server():
     global http_server
     try:
-        http_server = HTTPServer(('localhost', PORT), McpHttpHandler)
+        http_server = HTTPServer(('localhost', PORT), BridgeHttpHandler)
         http_server.serve_forever()
     except: pass
 
@@ -163,7 +163,7 @@ def start_mcp_server():
             return
 
         # Command for uv
-        cmd = [uv_path, 'run', '--python', '3.11', '--with-requirements', req_file, 'python', '-u', server_script]
+        cmd = [uv_path, 'run', '--python', '3.11', '--with-requirements', req_file, 'python', '-u', server_script, '--transport', 'sse', '--port', '8081']
         with open(log_file, 'a') as f: f.write(f"Cmd: {str(cmd)}\n")
 
         # CLEAN ENVIRONMENT:
@@ -171,6 +171,8 @@ def start_mcp_server():
         clean_env.pop('PYTHONHOME', None)
         clean_env.pop('PYTHONPATH', None)
         clean_env['PYTHONUNBUFFERED'] = '1'
+        clean_env['FASTMCP_PORT'] = '8081'
+        clean_env['FASTMCP_HOST'] = '127.0.0.1'
         
         if os.path.exists(os.path.join(os.path.expanduser('~'), '.cargo', 'bin')):
             clean_env['PATH'] = os.path.join(os.path.expanduser('~'), '.cargo', 'bin') + os.pathsep + clean_env.get('PATH', '')
