@@ -7,54 +7,74 @@ I18N = get_i18n_data(I18N_PATH)
 
 def export_stl_logic(filename: str):
     script = """
-import os
-d = adsk.fusion.Design.cast(app.activeProduct)
-em = d.exportManager
-# Sicherer Pfad im Home-Verzeichnis
-path = os.path.join(os.path.expanduser('~'), params['filename'] + '.stl')
-stl_opt = em.createSTLExportOptions(d.rootComponent, path)
-em.execute(stl_opt)
-returnValue.append(f"Exported to {path}")
+import adsk.core, adsk.fusion, os, tempfile
+try:
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    exportMgr = design.exportManager
+    
+    # Use user filename or default
+    name = params.get('filename', 'model')
+    if not name.endswith('.stl'): name += '.stl'
+    
+    # Export to downloads or temp
+    path = os.path.expanduser("~/Downloads")
+    if not os.path.exists(path): path = tempfile.gettempdir()
+    full_path = os.path.join(path, name)
+    
+    stlOptions = exportMgr.createSTLExportOptions(design.rootComponent, full_path)
+    exportMgr.execute(stlOptions)
+    returnValue.append(f"Exported to {full_path}")
+except Exception as e:
+    returnValue.append(f"Error: {str(e)}")
 """
     try:
         res = execute_fusion_script(script, {"filename": filename})
-        return res.get("data", ["Error"])[0]
+        return res.get("data", ["Error: No data from bridge"])[0]
     except FusionBridgeError as e:
-        return str(e)
+        return f"Bridge Error: {str(e)}"
 
-def export_f3d_logic(filename: str):
+def export_project_logic(filename: str):
     script = """
-import os
-d = adsk.fusion.Design.cast(app.activeProduct)
-em = d.exportManager
-path = os.path.join(os.path.expanduser('~'), params['filename'] + '.f3d')
-f3d_opt = em.createFusionArchiveExportOptions(path)
-em.execute(f3d_opt)
-returnValue.append(f"Project exported to {path}")
+import adsk.core, adsk.fusion, os, tempfile
+try:
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    exportMgr = design.exportManager
+    
+    name = params.get('filename', 'archive')
+    if not name.endswith('.f3d'): name += '.f3d'
+    
+    path = os.path.expanduser("~/Downloads")
+    if not os.path.exists(path): path = tempfile.gettempdir()
+    full_path = os.path.join(path, name)
+    
+    options = exportMgr.createFusionArchiveExportOptions(full_path)
+    exportMgr.execute(options)
+    returnValue.append(f"Project exported to {full_path}")
+except Exception as e:
+    returnValue.append(f"Error: {str(e)}")
 """
     try:
         res = execute_fusion_script(script, {"filename": filename})
-        return res.get("data", ["Error"])[0]
+        return res.get("data", ["Error: No data from bridge"])[0]
     except FusionBridgeError as e:
-        return str(e)
+        return f"Bridge Error: {str(e)}"
 
 def register_export_tools(mcp):
-    # DEUTSCH
     de = I18N["de"]["tools"]
+    en = I18N["en"]["tools"]
+
     @mcp.tool(name=de["export_stl"]["name"], description=de["export_stl"]["description"])
     def stl_exportieren(dateiname: str = "modell") -> str:
         return export_stl_logic(dateiname)
 
-    @mcp.tool(name=de["export_f3d"]["name"], description=de["export_f3d"]["description"])
-    def projekt_exportieren(dateiname: str = "archiv") -> str:
-        return export_f3d_logic(dateiname)
-
-    # ENGLISCH
-    en = I18N["en"]["tools"]
     @mcp.tool(name=en["export_stl"]["name"], description=en["export_stl"]["description"])
     def export_stl(filename: str = "model") -> str:
         return export_stl_logic(filename)
 
+    @mcp.tool(name=de["export_f3d"]["name"], description=de["export_f3d"]["description"])
+    def projekt_exportieren(dateiname: str = "archiv") -> str:
+        return export_project_logic(dateiname)
+
     @mcp.tool(name=en["export_f3d"]["name"], description=en["export_f3d"]["description"])
     def export_project(filename: str = "archive") -> str:
-        return export_f3d_logic(filename)
+        return export_project_logic(filename)

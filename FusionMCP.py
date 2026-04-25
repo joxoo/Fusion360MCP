@@ -46,7 +46,9 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                 exec_globals = {
                     'app': app, 'ui': ui, 'adsk': adsk, 
                     'traceback': traceback, 'returnValue': [],
-                    'params': params
+                    'params': params,
+                    'start_mcp_server': start_mcp_server,
+                    'stop_mcp_process': stop_mcp_process
                 }
                 
                 try:
@@ -137,41 +139,49 @@ def find_uv():
 def start_mcp_server():
     global mcp_process
     try:
-        if mcp_process: stop_mcp_process()
-
         addon_dir = os.path.dirname(__file__)
-        server_script = os.path.join(addon_dir, 'fusion_mcp_server.py')
-        req_file = os.path.join(addon_dir, 'requirements.txt')
         log_file = os.path.join(addon_dir, 'mcp_error.log')
         
+        # Explicitly create/clear log file first
+        with open(log_file, 'w') as f:
+            f.write(f"--- MCP Server Startup Log ---\n")
+            f.write(f"Addon Dir: {addon_dir}\n")
+
+        if mcp_process: 
+            with open(log_file, 'a') as f: f.write("Stopping existing process...\n")
+            stop_mcp_process()
+
+        server_script = os.path.join(addon_dir, 'fusion_mcp_server.py')
+        req_file = os.path.join(addon_dir, 'requirements.txt')
+        
         uv_path = find_uv()
+        with open(log_file, 'a') as f: f.write(f"UV Path: {uv_path}\n")
+        
         if not uv_path:
             app.log('Error: "uv" not found. MCP Server will not start.')
+            with open(log_file, 'a') as f: f.write("Error: uv not found\n")
             return
 
-        # Befehl f\u00fcr uv
-        cmd = [uv_path, 'run', '--python', '3.11', '--with-requirements', req_file, 'python', server_script]
-        app.log(f'MCP Server: Starting via uv at {uv_path}')
+        # Command for uv
+        cmd = [uv_path, 'run', '--python', '3.11', '--with-requirements', req_file, 'python', '-u', server_script]
+        with open(log_file, 'a') as f: f.write(f"Cmd: {str(cmd)}\n")
 
-        # Log-Datei f\u00fcr Fehler initialisieren
-        with open(log_file, 'w') as f:
-            f.write(f"Starting MCP Server...\nCmd: {str(cmd)}\n\n")
-
-        # UMGEBUNGSVARIABLEN BEREINIGEN:
-        # Fusion 360 setzt PYTHONHOME und PYTHONPATH, was uv/python verwirrt (ModuleNotFoundError: encodings)
+        # CLEAN ENVIRONMENT:
         clean_env = os.environ.copy()
         clean_env.pop('PYTHONHOME', None)
         clean_env.pop('PYTHONPATH', None)
-        # Optional: PATH erweitern, falls uv weitere Tools braucht
+        clean_env['PYTHONUNBUFFERED'] = '1'
+        
         if os.path.exists(os.path.join(os.path.expanduser('~'), '.cargo', 'bin')):
             clean_env['PATH'] = os.path.join(os.path.expanduser('~'), '.cargo', 'bin') + os.pathsep + clean_env.get('PATH', '')
 
-        # Prozess-Konfiguration
+        # Process config
+        log_handle = open(log_file, 'a')
         popen_kwargs = {
-            'stdout': open(log_file, 'a'),
+            'stdout': log_handle,
             'stderr': subprocess.STDOUT,
             'env': clean_env,
-            'cwd': addon_dir # Wichtig f\u00fcr relative Pfade im Skript
+            'cwd': addon_dir
         }
         
         if os.name == 'nt':
@@ -180,9 +190,11 @@ def start_mcp_server():
             popen_kwargs['preexec_fn'] = os.setsid
 
         mcp_process = subprocess.Popen(cmd, **popen_kwargs)
-        app.log('MCP Server subprocess triggered with clean environment.')
+        app.log('MCP Server subprocess triggered.')
+        with open(log_file, 'a') as f: f.write(f"Process started with PID: {mcp_process.pid}\n")
     except Exception as e:
         app.log(f'Failed to start MCP Server: {str(e)}')
+        with open(log_file, 'a') as f: f.write(f"FATAL START ERROR: {str(e)}\n{traceback.format_exc()}\n")
 
 def stop_mcp_process():
     global mcp_process

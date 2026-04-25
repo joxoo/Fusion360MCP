@@ -1,69 +1,87 @@
 from core.bridge import execute_fusion_script, get_i18n_data, FusionBridgeError
+from core.utils import get_tool_definition, format_response
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-I18N_PATH = os.path.join(BASE_DIR, "i18n.json")
-I18N = get_i18n_data(I18N_PATH)
+I18N = get_i18n_data(os.path.join(BASE_DIR, "i18n.json"))
 
-def create_bolt_logic(diameter_mm: float, length_cm: float, lang: str, modeled: bool):
+def create_bolt_logic(diameter_mm: float, length_cm: float, modeled: bool, lang: str):
+    """Business logic for creating a standard ISO bolt using numeric size resolution."""
     script = """
-import math
-import traceback
 try:
-    d = adsk.fusion.Design.cast(app.activeProduct)
-    c = d.rootComponent
+    # 1. Profile
+    radius_cm = (params['dia_mm'] / 10.0) / 2.0
+    s = root.sketches.add(root.xYConstructionPlane)
+    s.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(0, 0, 0), radius_cm)
+    prof = s.profiles.item(0)
     
-    dia = params['dia_mm']
-    l_cm = params['l_cm']
-    is_modeled = params['modeled']
-    radius_cm = (dia / 10.0) / 2.0
-
-    # 1. Geometrie
-    s = c.sketches.add(c.xYConstructionPlane)
-    s.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(0,0,0), radius_cm)
-    b = c.features.extrudeFeatures.addSimple(s.profiles.item(0), adsk.core.ValueInput.createByReal(l_cm), 0).bodies.item(0)
-
-    # 2. Gewinde
-    try:
-        f = next(f for f in b.faces if f.geometry.objectType == adsk.core.Cylinder.classType())
-        tf = c.features.threadFeatures
-        q = adsk.fusion.ThreadDataQuery.create()
-        
-        t_type = q.defaultMetricThreadType
-        success, designation, t_class = q.recommendThreadData(radius_cm * 2.0, False, t_type)
-        
-        if success:
-            # Fix Finding 6: Dummy check entfernt
-            t_info = adsk.fusion.ThreadInfo.create(False, False, t_type, designation, t_class, True)
-            if not t_info:
-                raise RuntimeError(f"ThreadInfo.create failed for {designation}.")
+    # 2. Extrude
+    ext = root.features.extrudeFeatures.addSimple(prof, adsk.core.ValueInput.createByReal(params['length']), 0)
+    body = ext.bodies.item(0)
+    
+    # 3. Threading
+    threads = root.features.threadFeatures
+    face = next((f for f in body.faces if f.geometry.surfaceType == adsk.core.SurfaceTypes.CylinderSurfaceType), None)
             
-            t_input = tf.createInput(f, t_info)
-            t_input.isModeled = is_modeled
-            tf.add(t_input)
-            returnValue.append(f"Erfolg: Bolt with {designation} ({t_class}) created.")
+    if face:
+        q = threads.threadDataQuery
+        t_type = 'ISO Metric profile'
+        
+        # Finding 1: Robust size resolution (tries numeric format if raw input fails)
+        dia_val = float(params['dia_mm'])
+        all_sizes = q.allSizes(t_type)
+        size = str(params['dia_mm'])
+        if size not in all_sizes:
+            size = "{:.1f}".format(dia_val)
+            if size not in all_sizes:
+                size = "{:.0f}.0".format(dia_val) # Some versions prefer this
+        
+        desigs = q.allDesignations(t_type, size)
+        
+        if len(desigs) > 0:
+            actual_desig = desigs[0]
+            classes = q.allClasses(False, t_type, actual_desig)
+            actual_class = classes[0] if len(classes) > 0 else ""
+            
+            # Finding 4: Detect internal/external based on normal
+            # If normal points towards axis, it's internal
+            (res, sp) = face.evaluator.getPointAtParameter(adsk.core.Point2D.create(0.5, 0.5))
+            (res, normal) = face.evaluator.getNormalAtPoint(sp)
+            axis_pt = face.geometry.origin
+            vec_to_axis = axis_pt.asVector()
+            vec_to_axis.subtract(sp.asVector())
+            is_internal = normal.dotProduct(vec_to_axis) > 0
+            
+            # Using ThreadInfo.create with detected is_internal
+            t_info = adsk.fusion.ThreadInfo.create(False, is_internal, t_type, actual_desig, actual_class, True)
+            t_input = threads.createInput(face, t_info)
+            t_input.isModeled = params['modeled']
+            threads.add(t_input)
+            returnValue.append(size)
         else:
-            returnValue.append(f"Error: No thread recommendation found for {dia}mm.")
-    except Exception as e:
-        returnValue.append(f"Geometry OK, Thread Error: {str(e)}")
+            returnValue.append("ERR_NO_THREAD")
+    else:
+        returnValue.append("ERR_NO_FACE")
 except Exception as e:
-    returnValue.append(f"Fatal Error: {str(e)}")
+    returnValue.append(f"ERR_API:{str(e)}")
 """
     try:
-        res = execute_fusion_script(script, {"dia_mm": diameter_mm, "l_cm": length_cm, "modeled": modeled})
-        return res.get("data", ["Error"])[0]
-    except FusionBridgeError as e:
-        return str(e)
+        res = execute_fusion_script(script, {"dia_mm": diameter_mm, "length": length_cm, "modeled": modeled})
+        val = res.get("data", ["ERR_UNKNOWN"])[0]
+        
+        if val.startswith("ERR_"):
+            err_map = {
+                "ERR_NO_THREAD": (f"Kein metrisches Gewinde für {diameter_mm}mm gefunden.", f"No metric thread found for {diameter_mm}mm."),
+                "ERR_NO_FACE": ("Zylinderfläche nicht gefunden.", "Cylinder face not found."),
+                "ERR_UNKNOWN": ("Unbekannter Fehler.", "Unknown error.")
+            }
+            msg = err_map.get(val, (val, val))
+            return format_response(lang, msg[0], msg[1])
+            
+        return format_response(lang, f"Bolzen M{val} erstellt.", f"Bolt M{val} created.")
+    except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def register_mechanical_tools(mcp):
-    # DEUTSCH
-    de_b = I18N["de"]["tools"]["create_bolt"]
-    @mcp.tool(name=de_b["name"], description=de_b["description"])
-    def bolzen_erstellen(durchmesser_mm: float, laenge_cm: float, modelliert: bool = True) -> str:
-        return create_bolt_logic(durchmesser_mm, laenge_cm, "de", modelliert)
-
-    # ENGLISCH
-    en_b = I18N["en"]["tools"]["create_bolt"]
-    @mcp.tool(name=en_b["name"], description=en_b["description"])
-    def create_bolt(diameter_mm: float, length_cm: float, modeled: bool = True) -> str:
-        return create_bolt_logic(diameter_mm, length_cm, "en", modeled)
+    de_def, en_def = get_tool_definition(I18N, "create_bolt")
+    if de_def: mcp.tool(name=de_def["name"], description=de_def["description"])(lambda diameter_mm, length_cm, modeled=True: create_bolt_logic(diameter_mm, length_cm, modeled, "de"))
+    if en_def: mcp.tool(name=en_def["name"], description=en_def["description"])(lambda diameter_mm, length_cm, modeled=True: create_bolt_logic(diameter_mm, length_cm, modeled, "en"))

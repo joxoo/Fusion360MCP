@@ -4,25 +4,37 @@
       "create_bolt": { "name": "bolzen_erstellen", "description": "Erstellt einen Bolzen mit Sechskantkopf und Gewinde." },
       "create_nut": { "name": "mutter_erstellen", "description": "Erstellt eine Sechskantmutter mit Innengewinde." },
       "create_new_design": { "name": "neue_konstruktion", "description": "Erstellt ein leeres Fusion 360 Dokument." },
-      "cleanup_design": { "name": "design_bereinigen", "description": "L\u00f6scht alle Objekte im aktuellen Entwurf." },
+      "cleanup_design": { "name": "design_bereinigen", "description": "Löscht alle Objekte im aktuellen Entwurf." },
       "save_document": { "name": "dokument_speichern", "description": "Speichert den aktuellen Stand in der Cloud." },
-      "export_stl": { "name": "stl_exportieren", "description": "Exportiert das Modell f\u00fcr den 3D-Druck." },
+      "export_stl": { "name": "stl_exportieren", "description": "Exportiert das Modell für den 3D-Druck." },
       "export_f3d": { "name": "projekt_exportieren", "description": "Exportiert das gesamte Projekt als F3D Archiv." },
       "capture_view": { "name": "ansicht_fotografieren", "description": "Erstellt einen Screenshot vom Viewport." },
-      "get_body_info": { "name": "koerper_analysieren", "description": "Gibt physikalische Daten (Volumen etc.) der K\u00f6rper zur\u00fcck." },
+      "get_body_info": { "name": "koerper_analysieren", "description": "Gibt physikalische Daten (Volumen etc.) der Körper zurück." },
       "create_component": { "name": "komponente_erstellen", "description": "Erstellt eine neue leere Komponente." },
       "create_sketch": { "name": "skizze_erstellen", "description": "Erstellt eine neue Skizze auf einer Ebene." },
+      "sketch_circular_pattern": { "name": "skizze_kreismuster", "description": "Erstellt eine kreisförmige Anordnung von Skizzenkurven." },
+      "sketch_rectangular_pattern": { "name": "skizze_rechteckmuster", "description": "Erstellt eine rechteckige Anordnung von Skizzenkurven." },
+      "sketch_offset": { "name": "skizze_versatz", "description": "Erstellt einen Versatz (Offset) von Skizzenkurven." },
+      "sketch_arc": { "name": "bogen_zeichnen", "description": "Zeichnet einen Bogen in einer Skizze (Mittelpunkt, Startpunkt, Winkel)." },
+      "sketch_polygon": { "name": "polygon_zeichnen", "description": "Zeichnet ein regelmäßiges Polygon (Vieleck) in einer Skizze." },
+      "sketch_spline": { "name": "spline_zeichnen", "description": "Zeichnet eine glatte Kurve (Spline) durch eine Liste von Punkten." },
+      "sketch_slot": { "name": "langloch_zeichnen", "description": "Zeichnet ein Langloch (Nut) in einer Skizze." },
       "create_box": { "name": "box_erstellen", "description": "Erstellt einen Quader mit den angegebenen Maßen in cm." },
       "create_hole": { "name": "bohrung_erstellen", "description": "Erstellt eine Bohrung mit Durchmesser (mm) an Position X/Y (cm) oder mittig." },
       "create_groove": { "name": "nut_erstellen", "description": "Erstellt eine Nut/Schlitz an einer Seite (links, rechts, oben, unten) eines Körpers." },
-      "get_timeline": { "name": "bearbeitungshistorie_anzeigen", "description": "Gibt eine Liste aller Operationen in der Fusion 360 Timeline zurück." }
+      "get_timeline": { "name": "bearbeitungshistorie_anzeigen", "description": "Gibt eine Liste aller Operationen in der Fusion 360 Timeline zurück." },
+      "change_design_mode": { "name": "design_modus_aendern", "description": "Stellt den Modus auf 'Bauteil' (Part) oder 'Baugruppe' (Assembly) um." },
+      "revolve_erstellen": { "name": "revolve_erstellen", "description": "Erstellt einen Rotationskörper." },
+      "kreismuster_erstellen": { "name": "kreismuster_erstellen", "description": "Erstellt ein kreisförmiges Muster eines Körpers." },
+      "abrunden_erstellen": { "name": "abrunden_erstellen", "description": "Rundet alle Kanten eines Körpers ab." },
+      "material_zuweisen": { "name": "material_zuweisen", "description": "Weist einem Körper ein Material aus der Fusion-Bibliothek zu." }
     },
     "thread_types": {
       "iso_metric": "Metrisches ISO-Profil"
     },
     "messages": {
       "bolt_created": "Bolzen {designation} erstellt.",
-      "nut_created": "Mutter f\u00fcr {designation} erstellt."
+      "nut_created": "Mutter für {designation} erstellt."
     }
   },
   "en": {
@@ -38,10 +50,22 @@
       "get_body_info": { "name": "analyze_bodies", "description": "Returns physical data of bodies." },
       "create_component": { "name": "create_component", "description": "Creates a new empty component." },
       "create_sketch": { "name": "create_sketch", "description": "Creates a new sketch on a plane." },
+      "sketch_circular_pattern": { "name": "sketch_circular_pattern", "description": "Creates a circular pattern of sketch curves." },
+      "sketch_rectangular_pattern": { "name": "sketch_rectangular_pattern", "description": "Creates a rectangular pattern of sketch curves." },
+      "sketch_offset": { "name": "sketch_offset", "description": "Creates an offset of sketch curves." },
+      "sketch_arc": { "name": "draw_arc", "description": "Draws an arc in a sketch (center, start, angle)." },
+      "sketch_polygon": { "name": "draw_polygon", "description": "Draws a regular polygon in a sketch." },
+      "sketch_spline": { "name": "draw_spline", "description": "Draws a smooth curve (spline) through a list of points." },
+      "sketch_slot": { "name": "draw_slot", "description": "Draws a slot (langloch) in a sketch." },
       "create_box": { "name": "create_box", "description": "Creates a box with the specified dimensions in cm." },
       "create_hole": { "name": "create_hole", "description": "Creates a hole with diameter (mm) at position X/Y (cm) or centered." },
       "create_groove": { "name": "create_groove", "description": "Creates a groove/slot on one side (left, right, top, bottom) of a body." },
-      "get_timeline": { "name": "get_timeline", "description": "Returns a list of all operations in the Fusion 360 timeline." }
+      "get_timeline": { "name": "get_timeline", "description": "Returns a list of all operations in the Fusion 360 timeline." },
+      "change_design_mode": { "name": "change_design_mode", "description": "Switch mode between 'Part' and 'Assembly'." },
+      "revolve_erstellen": { "name": "create_revolve", "description": "Creates a revolve body." },
+      "kreismuster_erstellen": { "name": "create_circular_pattern", "description": "Creates a circular pattern of a body." },
+      "abrunden_erstellen": { "name": "create_fillet", "description": "Creates fillets on all edges of a body." },
+      "material_zuweisen": { "name": "apply_material", "description": "Applies a material from the Fusion library to a body." }
     },
     "thread_types": {
       "iso_metric": "ISO Metric profile"
