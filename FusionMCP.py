@@ -109,12 +109,12 @@ def run_server():
     except: pass
 
 def find_uv():
-    """Sucht aggressiv nach uv in PATH und g\u00e4ngigen Installationspfaden."""
-    # 1. Standard PATH Suche
+    """Aggressively searches for uv in PATH and common installation paths."""
+    # 1. Standard PATH search
     uv_path = shutil.which('uv')
     if uv_path: return uv_path
     
-    # 2. Bekannte Pfade
+    # 2. Known paths
     home = os.path.expanduser('~')
     common_paths = []
     if os.name == 'nt': # Windows

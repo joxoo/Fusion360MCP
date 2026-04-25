@@ -1,12 +1,8 @@
-from core.bridge import execute_fusion_script, get_i18n_data, FusionBridgeError
-from core.utils import get_tool_definition, format_response
-import os
+from core.bridge import execute_fusion_script, FusionBridgeError
+from core.utils import format_response, register_tool, load_i18n
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-I18N = get_i18n_data(os.path.join(BASE_DIR, "i18n.json"))
-
-def create_sketch_logic(plane_name: str, name: str, lang: str):
-    """Creates a new sketch on a specific plane (XY, XZ, YZ)."""
+def create_sketch_logic(plane_name: str = "XY", name: str = "Sketch1", lang: str = "en"):
+    """Creates a new sketch on a specific plane."""
     script = """
 try:
     plane = {"XY": root.xYConstructionPlane, "XZ": root.xZConstructionPlane, "YZ": root.yZConstructionPlane}.get(params['plane'], root.xYConstructionPlane)
@@ -19,19 +15,16 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"plane": plane_name, "name": name})
         val = res.get("data", [""])[0]
-        if val.startswith("ERR_"): return val
-        return format_response(lang, f"Skizze '{val}' erstellt.", f"Sketch '{val}' created.")
+        if isinstance(val, str) and val.startswith("ERR_"): return val
+        return format_response(lang, "sketch_created", name=val)
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def add_constraint_logic(sketch_name: str, entity1_id: int, entity2_id: int, const_type: str, lang: str):
+def add_constraint_logic(sketch_name: str, entity1_id: int = 0, entity2_id: int = 0, const_type: str = "Horizontal", lang: str = "en"):
     """Adds a geometric constraint to a sketch."""
     script = """
 try:
-    # 1. Find Sketch
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
     if s:
-        # Constraints usually need specific curve references
-        # This is a placeholder for actual complex curve selection
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
 except Exception as e:
@@ -40,11 +33,11 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch":sketch_name, "c1":entity1_id, "c2":entity2_id, "type":const_type})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, f"Abhängigkeit ({const_type}) hinzugefügt.", f"Constraint ({const_type}) added.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        return format_response(lang, "constraint_added", type=const_type)
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def draw_line_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float, lang: str):
+def draw_line_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float, lang: str = "en"):
     """Draws a line in a specific sketch."""
     script = """
 try:
@@ -61,11 +54,12 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Linie gezeichnet.", "Line drawn.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "line_drawn")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def draw_circle_logic(sketch_name: str, x: float, y: float, radius: float, lang: str):
+def draw_circle_logic(sketch_name: str, x: float, y: float, radius: float, lang: str = "en"):
     """Draws a circle in a specific sketch."""
     script = """
 try:
@@ -81,11 +75,12 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "x": x, "y": y, "r": radius})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Kreis gezeichnet.", "Circle drawn.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "circle_drawn")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def draw_rectangle_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float, lang: str):
+def draw_rectangle_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float, lang: str = "en"):
     """Draws a rectangle in a specific sketch."""
     script = """
 try:
@@ -102,11 +97,12 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Rechteck gezeichnet.", "Rectangle drawn.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "rectangle_drawn")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def create_sketch_circular_pattern_logic(sketch_name: str, center_x: float, center_y: float, count: int, lang: str):
+def create_sketch_circular_pattern_logic(sketch_name: str, center_x: float, center_y: float, count: int, lang: str = "en"):
     """Creates a circular pattern of all curves in a sketch."""
     script = """
 try:
@@ -115,10 +111,7 @@ try:
         center = adsk.core.Point3D.create(params['cx'], params['cy'], 0)
         entities = adsk.core.ObjectCollection.create()
         for c in s.sketchCurves:
-            for curve in c: entities.add(c) # Add lines, circles etc.
-        
-        # In Sketch API, we use the specific collection's methods if needed, 
-        # but the Sketch object itself has circularPattern
+            for curve in c: entities.add(c)
         s.circularPattern(entities, center, params['count'], 2.0 * 3.14159, False)
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
@@ -128,11 +121,12 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "cx": center_x, "cy": center_y, "count": count})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Kreismuster in Skizze erstellt.", "Circular sketch pattern created.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "sketch_pattern_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def create_sketch_rectangular_pattern_logic(sketch_name: str, count_x: int, dist_x: float, count_y: int, dist_y: float, lang: str):
+def create_sketch_rectangular_pattern_logic(sketch_name: str, count_x: int, dist_x: float, count_y: int = 1, dist_y: float = 0, lang: str = "en"):
     """Creates a rectangular pattern of all curves in a sketch."""
     script = """
 try:
@@ -141,8 +135,6 @@ try:
         entities = adsk.core.ObjectCollection.create()
         for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs]:
             for c in curve_type: entities.add(c)
-        
-        # Use default axes (X/Y of the sketch)
         s.rectangularPattern(entities, s.originPoint, params['dx'], params['cx'], params['dy'], params['cy'], adsk.fusion.RectangularPatternSpacingTypes.SpacingRectangularPatternSpacingType)
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
@@ -152,11 +144,12 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "cx": count_x, "dx": dist_x, "cy": count_y, "dy": dist_y})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Rechteckmuster in Skizze erstellt.", "Rectangular sketch pattern created.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "sketch_pattern_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def create_sketch_offset_logic(sketch_name: str, distance: float, lang: str):
+def create_sketch_offset_logic(sketch_name: str, distance: float, lang: str = "en"):
     """Creates an offset of all curves in a sketch."""
     script = """
 try:
@@ -165,8 +158,6 @@ try:
         entities = adsk.core.ObjectCollection.create()
         for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs]:
             for c in curve_type: entities.add(c)
-        
-        # Offset(curves, directionPoint, distance)
         s.offset(entities, s.originPoint, params['dist'])
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
@@ -176,12 +167,13 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "dist": distance})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Versatz in Skizze erstellt.", "Sketch offset created.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "sketch_offset_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def draw_arc_logic(sketch_name: str, cx: float, cy: float, sx: float, sy: float, angle_deg: float, lang: str):
-    """Draws an arc in a specific sketch (center-start-angle)."""
+def draw_arc_logic(sketch_name: str, cx: float, cy: float, sx: float, sy: float, angle: float, lang: str = "en"):
+    """Draws an arc in a specific sketch."""
     script = """
 try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
@@ -196,41 +188,52 @@ except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
     try:
-        res = execute_fusion_script(script, {"sketch": sketch_name, "cx": cx, "cy": cy, "sx": sx, "sy": sy, "angle": angle_deg})
+        res = execute_fusion_script(script, {"sketch": sketch_name, "cx": cx, "cy": cy, "sx": sx, "sy": sy, "angle": angle})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Bogen gezeichnet.", "Arc drawn.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "arc_drawn")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def draw_polygon_logic(sketch_name: str, cx: float, cy: float, radius: float, sides: int, lang: str):
-    """Draws a circumscribed regular polygon in a sketch."""
+def draw_polygon_logic(sketch_name: str, cx: float, cy: float, radius: float, sides: int, lang: str = "en"):
+    """Draws a regular polygon in a sketch using individual lines for better profile detection."""
     script = """
-try:
-    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
-    if s:
-        center = adsk.core.Point3D.create(params['cx'], params['cy'], 0)
-        s.sketchCurves.sketchPolygons.addByCircumscribedCircle(center, params['r'], params['sides'], 0)
-        returnValue.append("OK")
-    else: returnValue.append("ERR_SKETCH")
-except Exception as e:
-    returnValue.append(f"ERR_API:{str(e)}")
+import math
+sketch_name = params.get('sketch')
+s = next((sk for sk in root.sketches if sk.name == sketch_name), None)
+if s:
+    center_x = float(params['cx'])
+    center_y = float(params['cy'])
+    r = float(params['r'])
+    n = int(params['sides'])
+    points = []
+    for i in range(n):
+        angle = i * (2.0 * math.pi / n)
+        px = center_x + r * math.cos(angle)
+        py = center_y + r * math.sin(angle)
+        points.append(adsk.core.Point3D.create(px, py, 0))
+    for i in range(n):
+        s.sketchCurves.sketchLines.addByTwoPoints(points[i], points[(i+1) % n])
+    returnValue.append("OK")
+else:
+    returnValue.append("ERR_SKETCH_NOT_FOUND")
 """
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "cx": cx, "cy": cy, "r": radius, "sides": sides})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, f"Polygon ({sides} Seiten) gezeichnet.", f"Polygon ({sides} sides) drawn.")
-    except FusionBridgeError as e: return f"Error: {str(e)}"
+        if val == "ERR_SKETCH_NOT_FOUND": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "polygon_drawn", sides=sides)
+    except Exception as e: return f"Error: {str(e)}"
 
-def draw_spline_logic(sketch_name: str, points: list, lang: str):
-    """Draws a fitted spline through a list of (x, y) coordinates."""
+def draw_spline_logic(sketch_name: str, points_list: list, lang: str = "en"):
+    """Draws a smooth curve through a list of points."""
     script = """
 try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
     if s:
         points = adsk.core.ObjectCollection.create()
-        for p in params['pts']:
-            points.add(adsk.core.Point3D.create(p[0], p[1], 0))
+        for p in params['pts']: points.add(adsk.core.Point3D.create(p[0], p[1], 0))
         s.sketchCurves.sketchFittedSplines.add(points)
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
@@ -238,14 +241,15 @@ except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
     try:
-        res = execute_fusion_script(script, {"sketch": sketch_name, "pts": points})
+        res = execute_fusion_script(script, {"sketch": sketch_name, "pts": points_list})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Spline gezeichnet.", "Spline drawn.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "spline_drawn")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def draw_slot_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float, width: float, lang: str):
-    """Draws a center-to-center slot in a sketch."""
+def draw_slot_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float, width: float, lang: str = "en"):
+    """Draws a slot in a sketch."""
     script = """
 try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
@@ -261,106 +265,144 @@ except Exception as e:
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "w": width})
         val = res.get("data", [""])[0]
-        if val == "ERR_SKETCH": return format_response(lang, "Skizze nicht gefunden.", "Sketch not found.")
-        return format_response(lang, "Langloch gezeichnet.", "Slot drawn.")
+        if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if isinstance(val, str) and val.startswith("ERR_API:"): return val
+        return format_response(lang, "slot_drawn")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def register_sketch_tools(mcp):
-    de = I18N["de"]["tools"]
-    en = I18N["en"]["tools"]
+    i18n = load_i18n()
+    register_tool(mcp, "add_constraint", add_constraint_logic)
 
+    de_create_sketch = i18n.get("de", {}).get("tools", {}).get("create_sketch")
+    en_create_sketch = i18n.get("en", {}).get("tools", {}).get("create_sketch")
+    de_draw_line = i18n.get("de", {}).get("tools", {}).get("draw_line")
+    en_draw_line = i18n.get("en", {}).get("tools", {}).get("draw_line")
+    de_draw_circle = i18n.get("de", {}).get("tools", {}).get("draw_circle")
+    en_draw_circle = i18n.get("en", {}).get("tools", {}).get("draw_circle")
+    de_draw_rectangle = i18n.get("de", {}).get("tools", {}).get("draw_rectangle")
+    en_draw_rectangle = i18n.get("en", {}).get("tools", {}).get("draw_rectangle")
+    de_polygon = i18n.get("de", {}).get("tools", {}).get("sketch_polygon")
+    en_polygon = i18n.get("en", {}).get("tools", {}).get("sketch_polygon")
+    de_arc = i18n.get("de", {}).get("tools", {}).get("sketch_arc")
+    en_arc = i18n.get("en", {}).get("tools", {}).get("sketch_arc")
+    de_spline = i18n.get("de", {}).get("tools", {}).get("sketch_spline")
+    en_spline = i18n.get("en", {}).get("tools", {}).get("sketch_spline")
+    de_slot = i18n.get("de", {}).get("tools", {}).get("sketch_slot")
+    en_slot = i18n.get("en", {}).get("tools", {}).get("sketch_slot")
+    de_circular_pattern = i18n.get("de", {}).get("tools", {}).get("sketch_circular_pattern")
+    en_circular_pattern = i18n.get("en", {}).get("tools", {}).get("sketch_circular_pattern")
+    de_rectangular_pattern = i18n.get("de", {}).get("tools", {}).get("sketch_rectangular_pattern")
+    en_rectangular_pattern = i18n.get("en", {}).get("tools", {}).get("sketch_rectangular_pattern")
+    de_offset = i18n.get("de", {}).get("tools", {}).get("sketch_offset")
+    en_offset = i18n.get("en", {}).get("tools", {}).get("sketch_offset")
 
-    # Create Sketch
-    mcp.tool(name=de["create_sketch"]["name"], description=de["create_sketch"]["description"])(
-        lambda ebene="XY", name="Skizze1": create_sketch_logic(ebene, name, "de")
-    )
-    mcp.tool(name=en["create_sketch"]["name"], description=en["create_sketch"]["description"])(
-        lambda plane="XY", name="Sketch1": create_sketch_logic(plane, name, "en")
-    )
+    if de_create_sketch:
+        @mcp.tool(name=de_create_sketch["name"], description=de_create_sketch["description"])
+        def skizze_erstellen(name: str = "Sketch1", ebene: str = "XY"):
+            return create_sketch_logic(ebene, name, "de")
 
-    # Drawing Tools
-    mcp.tool(name="linie_zeichnen", description="Zeichnet eine Linie in einer Skizze.")(
-        lambda skizzen_name, x1, y1, x2, y2: draw_line_logic(skizzen_name, x1, y1, x2, y2, "de")
-    )
-    mcp.tool(name="draw_line", description="Draws a line in a sketch.")(
-        lambda sketch_name, x1, y1, x2, y2: draw_line_logic(sketch_name, x1, y1, x2, y2, "en")
-    )
+    if en_create_sketch:
+        @mcp.tool(name=en_create_sketch["name"], description=en_create_sketch["description"])
+        def create_sketch(name: str = "Sketch1", plane: str = "XY"):
+            return create_sketch_logic(plane, name, "en")
 
-    mcp.tool(name="kreis_zeichnen", description="Zeichnet einen Kreis in einer Skizze.")(
-        lambda skizzen_name, x, y, radius: draw_circle_logic(skizzen_name, x, y, radius, "de")
-    )
-    mcp.tool(name="draw_circle", description="Draws a circle in a sketch.")(
-        lambda sketch_name, x, y, radius: draw_circle_logic(sketch_name, x, y, radius, "en")
-    )
+    if de_draw_line:
+        @mcp.tool(name=de_draw_line["name"], description=de_draw_line["description"])
+        def linie_zeichnen(skizzen_name: str, x1: float, y1: float, x2: float, y2: float):
+            return draw_line_logic(skizzen_name, x1, y1, x2, y2, "de")
 
-    mcp.tool(name="rechteck_zeichnen", description="Zeichnet ein Rechteck in einer Skizze.")(
-        lambda skizzen_name, x1, y1, x2, y2: draw_rectangle_logic(skizzen_name, x1, y1, x2, y2, "de")
-    )
-    mcp.tool(name="draw_rectangle", description="Draws a rectangle in a sketch.")(
-        lambda sketch_name, x1, y1, x2, y2: draw_rectangle_logic(sketch_name, x1, y1, x2, y2, "en")
-    )
+    if en_draw_line:
+        @mcp.tool(name=en_draw_line["name"], description=en_draw_line["description"])
+        def draw_line(sketch_name: str, x1: float, y1: float, x2: float, y2: float):
+            return draw_line_logic(sketch_name, x1, y1, x2, y2, "en")
 
-    # Patterns
-    mcp.tool(name=de["sketch_circular_pattern"]["name"], description=de["sketch_circular_pattern"]["description"])(
-        lambda skizzen_name, center_x, center_y, anzahl: create_sketch_circular_pattern_logic(skizzen_name, center_x, center_y, anzahl, "de")
-    )
-    mcp.tool(name=en["sketch_circular_pattern"]["name"], description=en["sketch_circular_pattern"]["description"])(
-        lambda sketch_name, center_x, center_y, count: create_sketch_circular_pattern_logic(sketch_name, center_x, center_y, count, "en")
-    )
+    if de_draw_circle:
+        @mcp.tool(name=de_draw_circle["name"], description=de_draw_circle["description"])
+        def kreis_zeichnen(skizzen_name: str, center_x: float, center_y: float, radius: float):
+            return draw_circle_logic(skizzen_name, center_x, center_y, radius, "de")
 
-    mcp.tool(name=de["sketch_rectangular_pattern"]["name"], description=de["sketch_rectangular_pattern"]["description"])(
-        lambda skizzen_name, anzahl_x, distanz_x, anzahl_y, distanz_y: create_sketch_rectangular_pattern_logic(skizzen_name, anzahl_x, distanz_x, anzahl_y, distanz_y, "de")
-    )
-    mcp.tool(name=en["sketch_rectangular_pattern"]["name"], description=en["sketch_rectangular_pattern"]["description"])(
-        lambda sketch_name, count_x, dist_x, count_y, dist_y: create_sketch_rectangular_pattern_logic(sketch_name, count_x, dist_x, count_y, dist_y, "en")
-    )
+    if en_draw_circle:
+        @mcp.tool(name=en_draw_circle["name"], description=en_draw_circle["description"])
+        def draw_circle(sketch_name: str, center_x: float, center_y: float, radius: float):
+            return draw_circle_logic(sketch_name, center_x, center_y, radius, "en")
 
-    # Offset
-    mcp.tool(name=de["sketch_offset"]["name"], description=de["sketch_offset"]["description"])(
-        lambda skizzen_name, abstand: create_sketch_offset_logic(skizzen_name, abstand, "de")
-    )
-    mcp.tool(name=en["sketch_offset"]["name"], description=en["sketch_offset"]["description"])(
-        lambda sketch_name, distance: create_sketch_offset_logic(sketch_name, distance, "en")
-    )
+    if de_draw_rectangle:
+        @mcp.tool(name=de_draw_rectangle["name"], description=de_draw_rectangle["description"])
+        def rechteck_zeichnen(skizzen_name: str, x1: float, y1: float, x2: float, y2: float):
+            return draw_rectangle_logic(skizzen_name, x1, y1, x2, y2, "de")
 
-    # Arc
-    mcp.tool(name=de["sketch_arc"]["name"], description=de["sketch_arc"]["description"])(
-        lambda skizzen_name, mittelpunkt_x, mittelpunkt_y, start_x, start_y, winkel: draw_arc_logic(skizzen_name, mittelpunkt_x, mittelpunkt_y, start_x, start_y, winkel, "de")
-    )
-    mcp.tool(name=en["sketch_arc"]["name"], description=en["sketch_arc"]["description"])(
-        lambda sketch_name, cx, cy, sx, sy, angle: draw_arc_logic(sketch_name, cx, cy, sx, sy, angle, "en")
-    )
+    if en_draw_rectangle:
+        @mcp.tool(name=en_draw_rectangle["name"], description=en_draw_rectangle["description"])
+        def draw_rectangle(sketch_name: str, x1: float, y1: float, x2: float, y2: float):
+            return draw_rectangle_logic(sketch_name, x1, y1, x2, y2, "en")
 
-    # Polygon
-    mcp.tool(name=de["sketch_polygon"]["name"], description=de["sketch_polygon"]["description"])(
-        lambda skizzen_name, center_x, center_y, radius, seiten: draw_polygon_logic(skizzen_name, center_x, center_y, radius, seiten, "de")
-    )
-    mcp.tool(name=en["sketch_polygon"]["name"], description=en["sketch_polygon"]["description"])(
-        lambda sketch_name, cx, cy, radius, sides: draw_polygon_logic(sketch_name, cx, cy, radius, sides, "en")
-    )
+    if de_polygon:
+        @mcp.tool(name=de_polygon["name"], description=de_polygon["description"])
+        def polygon_zeichnen(skizzen_name: str, center_x: float, center_y: float, radius: float, seiten: int):
+            return draw_polygon_logic(skizzen_name, center_x, center_y, radius, seiten, "de")
 
-    # Spline
-    mcp.tool(name=de["sketch_spline"]["name"], description=de["sketch_spline"]["description"])(
-        lambda skizzen_name, punkte_liste: draw_spline_logic(skizzen_name, punkte_liste, "de")
-    )
-    mcp.tool(name=en["sketch_spline"]["name"], description=en["sketch_spline"]["description"])(
-        lambda sketch_name, points_list: draw_spline_logic(sketch_name, points_list, "en")
-    )
+    if en_polygon:
+        @mcp.tool(name=en_polygon["name"], description=en_polygon["description"])
+        def draw_polygon(sketch_name: str, center_x: float, center_y: float, radius: float, sides: int):
+            return draw_polygon_logic(sketch_name, center_x, center_y, radius, sides, "en")
 
-    # Slot
-    mcp.tool(name=de["sketch_slot"]["name"], description=de["sketch_slot"]["description"])(
-        lambda skizzen_name, x1, y1, x2, y2, breite: draw_slot_logic(skizzen_name, x1, y1, x2, y2, breite, "de")
-    )
-    mcp.tool(name=en["sketch_slot"]["name"], description=en["sketch_slot"]["description"])(
-        lambda sketch_name, x1, y1, x2, y2, width: draw_slot_logic(sketch_name, x1, y1, x2, y2, width, "en")
-    )
+    if de_arc:
+        @mcp.tool(name=de_arc["name"], description=de_arc["description"])
+        def bogen_zeichnen(skizzen_name: str, mittelpunkt_x: float, mittelpunkt_y: float, start_x: float, start_y: float, winkel: float):
+            return draw_arc_logic(skizzen_name, mittelpunkt_x, mittelpunkt_y, start_x, start_y, winkel, "de")
 
-    # Constraints
-    mcp.tool(name="abhaengigkeit_hinzufuegen", description="Fügt einer Skizze geometrische Abhängigkeiten hinzu (z.B. Horizontal, Vertikal).")(
-        lambda skizzen_name, typ: add_constraint_logic(skizzen_name, 0, 0, typ, "de")
-    )
+    if en_arc:
+        @mcp.tool(name=en_arc["name"], description=en_arc["description"])
+        def draw_arc(sketch_name: str, center_x: float, center_y: float, start_x: float, start_y: float, angle: float):
+            return draw_arc_logic(sketch_name, center_x, center_y, start_x, start_y, angle, "en")
 
-    mcp.tool(name="add_constraint", description="Adds geometric constraints to a sketch (e.g., Horizontal, Vertical).")(
-        lambda sketch_name, type: add_constraint_logic(sketch_name, 0, 0, type, "en")
-    )
+    if de_spline:
+        @mcp.tool(name=de_spline["name"], description=de_spline["description"])
+        def spline_zeichnen(skizzen_name: str, punkte_liste: list):
+            return draw_spline_logic(skizzen_name, punkte_liste, "de")
 
+    if en_spline:
+        @mcp.tool(name=en_spline["name"], description=en_spline["description"])
+        def draw_spline(sketch_name: str, points_list: list):
+            return draw_spline_logic(sketch_name, points_list, "en")
+
+    if de_slot:
+        @mcp.tool(name=de_slot["name"], description=de_slot["description"])
+        def langloch_zeichnen(skizzen_name: str, x1: float, y1: float, x2: float, y2: float, breite: float):
+            return draw_slot_logic(skizzen_name, x1, y1, x2, y2, breite, "de")
+
+    if en_slot:
+        @mcp.tool(name=en_slot["name"], description=en_slot["description"])
+        def draw_slot(sketch_name: str, x1: float, y1: float, x2: float, y2: float, width: float):
+            return draw_slot_logic(sketch_name, x1, y1, x2, y2, width, "en")
+
+    if de_circular_pattern:
+        @mcp.tool(name=de_circular_pattern["name"], description=de_circular_pattern["description"])
+        def skizze_kreismuster(skizzen_name: str, center_x: float, center_y: float, anzahl: int):
+            return create_sketch_circular_pattern_logic(skizzen_name, center_x, center_y, anzahl, "de")
+
+    if en_circular_pattern:
+        @mcp.tool(name=en_circular_pattern["name"], description=en_circular_pattern["description"])
+        def sketch_circular_pattern(sketch_name: str, center_x: float, center_y: float, count: int):
+            return create_sketch_circular_pattern_logic(sketch_name, center_x, center_y, count, "en")
+
+    if de_rectangular_pattern:
+        @mcp.tool(name=de_rectangular_pattern["name"], description=de_rectangular_pattern["description"])
+        def skizze_rechteckmuster(skizzen_name: str, anzahl_x: int, distanz_x: float, anzahl_y: int = 1, distanz_y: float = 0):
+            return create_sketch_rectangular_pattern_logic(skizzen_name, anzahl_x, distanz_x, anzahl_y, distanz_y, "de")
+
+    if en_rectangular_pattern:
+        @mcp.tool(name=en_rectangular_pattern["name"], description=en_rectangular_pattern["description"])
+        def sketch_rectangular_pattern(sketch_name: str, count_x: int, dist_x: float, count_y: int = 1, dist_y: float = 0):
+            return create_sketch_rectangular_pattern_logic(sketch_name, count_x, dist_x, count_y, dist_y, "en")
+
+    if de_offset:
+        @mcp.tool(name=de_offset["name"], description=de_offset["description"])
+        def skizze_versatz(skizzen_name: str, abstand: float):
+            return create_sketch_offset_logic(skizzen_name, abstand, "de")
+
+    if en_offset:
+        @mcp.tool(name=en_offset["name"], description=en_offset["description"])
+        def sketch_offset(sketch_name: str, distance: float):
+            return create_sketch_offset_logic(sketch_name, distance, "en")

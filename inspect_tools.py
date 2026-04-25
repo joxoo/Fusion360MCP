@@ -13,7 +13,7 @@ try:
     response = requests.post(url, json=payload)
     tools = response.json()
     for tool in tools.get('result', {}).get('tools', []):
-        if tool['name'] == 'box_erstellen':
+        if tool['name'] == 'create_box':
             print(json.dumps(tool, indent=2))
 except Exception as e:
     print(f"Error: {e}")
