@@ -1,0 +1,12 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"addin",
+	"id":	"b6a4a15b-568e-4a6c-9c7a-568e4a6c9c7a",
+	"author":	"Gemini CLI",
+	"description":	"MCP Bridge for Fusion 360",
+	"editOnFree":	true,
+	"supportedOS":	"windows|mac",
+	"name": "FusionMCP",
+	"version": "9.0.0",
+	"runOnStartup": true
+}

@@ -1,0 +1,54 @@
+{
+  "de": {
+    "tools": {
+      "create_bolt": { "name": "bolzen_erstellen", "description": "Erstellt einen Bolzen mit Sechskantkopf und Gewinde." },
+      "create_nut": { "name": "mutter_erstellen", "description": "Erstellt eine Sechskantmutter mit Innengewinde." },
+      "create_new_design": { "name": "neue_konstruktion", "description": "Erstellt ein leeres Fusion 360 Dokument." },
+      "cleanup_design": { "name": "design_bereinigen", "description": "L\u00f6scht alle Objekte im aktuellen Entwurf." },
+      "save_document": { "name": "dokument_speichern", "description": "Speichert den aktuellen Stand in der Cloud." },
+      "export_stl": { "name": "stl_exportieren", "description": "Exportiert das Modell f\u00fcr den 3D-Druck." },
+      "export_f3d": { "name": "projekt_exportieren", "description": "Exportiert das gesamte Projekt als F3D Archiv." },
+      "capture_view": { "name": "ansicht_fotografieren", "description": "Erstellt einen Screenshot vom Viewport." },
+      "get_body_info": { "name": "koerper_analysieren", "description": "Gibt physikalische Daten (Volumen etc.) der K\u00f6rper zur\u00fcck." },
+      "create_component": { "name": "komponente_erstellen", "description": "Erstellt eine neue leere Komponente." },
+      "create_sketch": { "name": "skizze_erstellen", "description": "Erstellt eine neue Skizze auf einer Ebene." },
+      "create_box": { "name": "box_erstellen", "description": "Erstellt einen Quader mit den angegebenen Maßen in cm." },
+      "create_hole": { "name": "bohrung_erstellen", "description": "Erstellt eine Bohrung mit Durchmesser (mm) an Position X/Y (cm) oder mittig." },
+      "create_groove": { "name": "nut_erstellen", "description": "Erstellt eine Nut/Schlitz an einer Seite (links, rechts, oben, unten) eines Körpers." },
+      "get_timeline": { "name": "bearbeitungshistorie_anzeigen", "description": "Gibt eine Liste aller Operationen in der Fusion 360 Timeline zurück." }
+    },
+    "thread_types": {
+      "iso_metric": "Metrisches ISO-Profil"
+    },
+    "messages": {
+      "bolt_created": "Bolzen {designation} erstellt.",
+      "nut_created": "Mutter f\u00fcr {designation} erstellt."
+    }
+  },
+  "en": {
+    "tools": {
+      "create_bolt": { "name": "create_bolt", "description": "Creates a bolt with a hexagonal head and thread." },
+      "create_nut": { "name": "create_nut", "description": "Creates a hexagonal nut with internal thread." },
+      "create_new_design": { "name": "create_new_design", "description": "Creates a new blank Fusion 360 document." },
+      "cleanup_design": { "name": "cleanup_design", "description": "Deletes all objects in the active design." },
+      "save_document": { "name": "save_document", "description": "Saves the active document." },
+      "export_stl": { "name": "export_stl", "description": "Exports the model as STL for 3D printing." },
+      "export_f3d": { "name": "export_project", "description": "Exports the full project as F3D archive." },
+      "capture_view": { "name": "capture_view", "description": "Captures a screenshot of the viewport." },
+      "get_body_info": { "name": "analyze_bodies", "description": "Returns physical data of bodies." },
+      "create_component": { "name": "create_component", "description": "Creates a new empty component." },
+      "create_sketch": { "name": "create_sketch", "description": "Creates a new sketch on a plane." },
+      "create_box": { "name": "create_box", "description": "Creates a box with the specified dimensions in cm." },
+      "create_hole": { "name": "create_hole", "description": "Creates a hole with diameter (mm) at position X/Y (cm) or centered." },
+      "create_groove": { "name": "create_groove", "description": "Creates a groove/slot on one side (left, right, top, bottom) of a body." },
+      "get_timeline": { "name": "get_timeline", "description": "Returns a list of all operations in the Fusion 360 timeline." }
+    },
+    "thread_types": {
+      "iso_metric": "ISO Metric profile"
+    },
+    "messages": {
+      "bolt_created": "Bolt {designation} created.",
+      "nut_created": "Nut for {designation} created."
+    }
+  }
+}
