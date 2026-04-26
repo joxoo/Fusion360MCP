@@ -3,7 +3,7 @@ import os
 import functools
 import inspect
 
-# Common Fusion 360 script fragments (Python code executed inside Fusion)
+# Common Fusion 360 script fragments
 COMMON_FUSION_SCRIPTS = {
     "find_body": """
 def find_body_recursive(component, target_name):
@@ -28,19 +28,15 @@ root = d.rootComponent
 """
 }
 
-# Global I18N data
 _I18N_DATA = None
 
 def load_i18n(file_path=None):
     global _I18N_DATA
     if _I18N_DATA is not None:
         return _I18N_DATA
-    
     if file_path is None:
-        # Default path relative to this file
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         file_path = os.path.join(base_dir, "i18n.json")
-    
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             _I18N_DATA = json.load(f)
@@ -50,67 +46,57 @@ def load_i18n(file_path=None):
         return _I18N_DATA
 
 def format_response(lang, key, **kwargs):
-    """Formats return messages based on the requested language and a key in i18n.json."""
     i18n = load_i18n()
-    
-    # Try messages first
     message = i18n.get(lang, {}).get("messages", {}).get(key)
-    
-    # If key was not in messages, check errors
     if message is None:
         message = i18n.get(lang, {}).get("errors", {}).get(key, key)
-    
     try:
         return message.format(**kwargs)
     except Exception:
         return message
 
-def _build_localized_signature(func, alias_map):
-    sig = inspect.signature(func)
-    localized_params = []
-    reverse_alias_map = {}
-
-    for param in sig.parameters.values():
-        if param.name == "lang":
-            continue
-        localized_name = alias_map.get(param.name, param.name)
-        reverse_alias_map[localized_name] = param.name
-        localized_params.append(param.replace(name=localized_name))
-
-    return sig.replace(parameters=localized_params), reverse_alias_map
-
 def register_tool(mcp, tool_key, func, param_aliases=None):
     """
-    Registers a tool for both German and English if defined in i18n.json.
-    Supports localized parameter names through i18n metadata or explicit aliases.
+    Simpler registration that uses FastMCP native tool decorator.
     """
     i18n = load_i18n()
 
-    def create_wrapper(target_lang, config):
-        alias_map = {}
-        if config:
-            alias_map.update(config.get("param_aliases", {}))
-        if param_aliases:
-            alias_map.update(param_aliases.get(target_lang, {}))
-
-        localized_sig, reverse_alias_map = _build_localized_signature(func, alias_map)
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            bound = localized_sig.bind_partial(*args, **kwargs)
-            canonical_kwargs = {
-                reverse_alias_map.get(name, name): value
-                for name, value in bound.arguments.items()
-            }
-            return func(lang=target_lang, **canonical_kwargs)
-        wrapper.__signature__ = localized_sig
-        return wrapper
-
+    # Define wrappers for each language
     for lang in ("de", "en"):
         config = i18n.get(lang, {}).get("tools", {}).get(tool_key)
-        if not config:
-            continue
+        if not config: continue
+        
         name = config.get("name")
         desc = config.get("description", "")
+        alias_map = config.get("param_aliases", {})
+        
         if name:
-            mcp.tool(name=name, description=desc)(create_wrapper(lang, config))
+            # We create a specific function for FastMCP to inspect
+            # This function must match the canonical logic but with localized names
+            
+            orig_sig = inspect.signature(func)
+            params = [p for n, p in orig_sig.parameters.items() if n != 'lang']
+            
+            # Map parameters to localized names
+            loc_params = []
+            for p in params:
+                loc_name = alias_map.get(p.name, p.name)
+                loc_params.append(p.replace(name=loc_name))
+            
+            new_sig = orig_sig.replace(parameters=loc_params)
+
+            def create_closure(target_lang, local_alias_map):
+                reverse_map = {v: k for k, v in local_alias_map.items()}
+                
+                @functools.wraps(func)
+                def tool_func(**kwargs):
+                    # Map back to canonical
+                    canonical_kwargs = {reverse_map.get(k, k): v for k, v in kwargs.items()}
+                    return func(lang=target_lang, **canonical_kwargs)
+                
+                # Re-apply the localized signature and annotations so FastMCP sees them
+                tool_func.__signature__ = new_sig
+                tool_func.__annotations__ = {alias_map.get(k, k): v for k, v in func.__annotations__.items() if k != 'lang'}
+                return tool_func
+
+            mcp.tool(name=name, description=desc)(create_closure(lang, alias_map))

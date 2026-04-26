@@ -34,6 +34,12 @@ register_parameter_tools(mcp)
 register_assembly_tools(mcp)
 register_sketch_tools(mcp)
 
+from modules.design import create_new_design_logic
+@mcp.tool(name="test_new_design")
+def test_new_design():
+    """Manual registration test."""
+    return create_new_design_logic(lang="en")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fusion MCP Server")
     parser.add_argument("--transport", type=str, default="sse", choices=["stdio", "sse", "streamable-http"])
@@ -51,12 +57,8 @@ if __name__ == "__main__":
         from starlette.responses import JSONResponse
 
         # Get the underlying SSE/HTTP app
-        # fastmcp uses sse_app() to create a Starlette app with /sse and /messages routes
         mcp_app = mcp.sse_app() if args.transport == "sse" else mcp.streamable_http_app()
 
-        # Create a wrapper app to map /mcp to the root of the MCP app
-        # This allows accessing the server at http://localhost:8081/mcp/sse etc.
-        # To make http://localhost:8081/mcp work directly, we add a redirect or status
         async def root_status(request):
             return JSONResponse({
                 "status": "mcp_server_online",
@@ -67,8 +69,8 @@ if __name__ == "__main__":
 
         app = Starlette(routes=[
             Route("/mcp", endpoint=root_status),
-            Mount("/mcp", app=mcp_app), # This mounts /sse and /messages under /mcp
-            Mount("/", app=mcp_app)      # Also keep original routes for compatibility
+            Mount("/mcp", app=mcp_app),
+            Mount("/", app=mcp_app)
         ])
 
         logger.info(f"Starting MCP server on {args.host}:{args.port} (transport={args.transport})")

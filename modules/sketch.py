@@ -106,43 +106,87 @@ except Exception as e:
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def create_sketch_circular_pattern_logic(sketch_name: str, center_x: float, center_y: float, count: int, lang: str = "en"):
-    """Creates a circular pattern of all curves in a sketch."""
+    """Creates a circular pattern of all curves in a sketch using GeometricConstraints."""
     script = """
 try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
     if s:
-        center = adsk.core.Point3D.create(params['cx'], params['cy'], 0)
-        entities = adsk.core.ObjectCollection.create()
-        for c in s.sketchCurves:
-            for curve in c: entities.add(c)
-        s.circularPattern(entities, center, params['count'], 2.0 * 3.14159, False)
-        returnValue.append("OK")
+        entities = []
+        for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs, s.sketchCurves.sketchFittedSplines]:
+            for c in curve_type: entities.append(c)
+        
+        if len(entities) < 1:
+            returnValue.append("ERR_EMPTY")
+        else:
+            center_point = s.sketchPoints.add(adsk.core.Point3D.create(params['cx'], params['cy'], 0))
+            constraints = s.geometricConstraints
+            # In this version of API, it takes a list/vector and a SketchPoint
+            pattern_input = constraints.createCircularPatternInput(entities, center_point)
+            pattern_input.quantity = adsk.core.ValueInput.createByReal(params['count'])
+            pattern_input.totalAngle = adsk.core.ValueInput.createByString("360 deg")
+            constraints.addCircularPattern(pattern_input)
+            returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
-    """
+"""
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "cx": center_x, "cy": center_y, "count": count})
+        val = res.get("data", [""])[0]
+        if val == "ERR_EMPTY":
+            return format_response(lang, "sketch_not_found")
+        if val == "OK":
+            return format_response(lang, "sketch_pattern_created")
         return _handle_sketch_result(res, lang, "sketch_pattern_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def create_sketch_rectangular_pattern_logic(sketch_name: str, count_x: int, dist_x: float, count_y: int = 1, dist_y: float = 0, lang: str = "en"):
-    """Creates a rectangular pattern of all curves in a sketch."""
+    """Creates a rectangular pattern of all curves in a sketch using GeometricConstraints and helper lines for direction."""
     script = """
 try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
     if s:
-        entities = adsk.core.ObjectCollection.create()
-        for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs]:
-            for c in curve_type: entities.add(c)
-        s.rectangularPattern(entities, s.originPoint, params['dx'], params['cx'], params['dy'], params['cy'], adsk.fusion.RectangularPatternSpacingTypes.SpacingRectangularPatternSpacingType)
-        returnValue.append("OK")
+        entities = []
+        for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs, s.sketchCurves.sketchFittedSplines]:
+            for c in curve_type: entities.append(c)
+            
+        if len(entities) < 1:
+            returnValue.append("ERR_EMPTY")
+        else:
+            constraints = s.geometricConstraints
+            # RectangularPatternConstraintInput requires a list/vector
+            pattern_input = constraints.createRectangularPatternInput(entities, adsk.fusion.PatternDistanceType.SpacingPatternDistanceType)
+            
+            # Use existing lines or create helper construction lines for directions
+            # Sketch.addRectangularPattern requires a SketchLine as direction entity
+            lines = s.sketchCurves.sketchLines
+            dir1 = next((l for l in lines if l.isConstruction), None)
+            if not dir1:
+                dir1 = lines.addByTwoPoints(adsk.core.Point3D.create(0,0,0), adsk.core.Point3D.create(1,0,0))
+                dir1.isConstruction = True
+            
+            pattern_input.setDirectionOne(dir1, adsk.core.ValueInput.createByReal(params['cx']), adsk.core.ValueInput.createByReal(params['dx']))
+            
+            if params['cy'] > 1:
+                dir2 = next((l for l in lines if l.isConstruction and l != dir1), None)
+                if not dir2:
+                    dir2 = lines.addByTwoPoints(adsk.core.Point3D.create(0,0,0), adsk.core.Point3D.create(0,1,0))
+                    dir2.isConstruction = True
+                pattern_input.setDirectionTwo(dir2, adsk.core.ValueInput.createByReal(params['cy']), adsk.core.ValueInput.createByReal(params['dy']))
+            
+            constraints.addRectangularPattern(pattern_input)
+            returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
-    """
+"""
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "cx": count_x, "dx": dist_x, "cy": count_y, "dy": dist_y})
+        val = res.get("data", [""])[0]
+        if val == "ERR_EMPTY":
+            return format_response(lang, "sketch_not_found")
+        if val == "OK":
+            return format_response(lang, "sketch_pattern_created")
         return _handle_sketch_result(res, lang, "sketch_pattern_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
@@ -153,16 +197,25 @@ try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
     if s:
         entities = adsk.core.ObjectCollection.create()
-        for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs]:
+        for curve_type in [s.sketchCurves.sketchLines, s.sketchCurves.sketchCircles, s.sketchCurves.sketchArcs, s.sketchCurves.sketchFittedSplines]:
             for c in curve_type: entities.add(c)
-        s.offset(entities, s.originPoint, params['dist'])
-        returnValue.append("OK")
+        if entities.count < 1:
+            returnValue.append("ERR_EMPTY")
+        else:
+            offset_point = adsk.core.Point3D.create(10.0, 10.0, 0)
+            s.offset(entities, offset_point, params['dist'])
+            returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
-    """
+"""
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "dist": distance})
+        val = res.get("data", [""])[0]
+        if val == "ERR_EMPTY":
+            return format_response(lang, "sketch_not_found")
+        if val == "OK":
+            return format_response(lang, "sketch_offset_created")
         return _handle_sketch_result(res, lang, "sketch_offset_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
@@ -241,12 +294,14 @@ try:
     if s:
         p1 = adsk.core.Point3D.create(params['x1'], params['y1'], 0)
         p2 = adsk.core.Point3D.create(params['x2'], params['y2'], 0)
-        s.sketchCurves.sketchSlots.addByCenterToCenter(p1, p2, params['w'])
+        # slotWidth in internal units (cm), width parameter from MCP is mm, so divide by 10
+        sw = float(params['w']) / 10.0
+        s.sketchCurves.sketchSlots.addCenterToCenterSlot(p1, p2, sw)
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
-    """
+"""
     try:
         res = execute_fusion_script(script, {"sketch": sketch_name, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "w": width})
         return _handle_sketch_result(res, lang, "slot_drawn")

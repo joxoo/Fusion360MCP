@@ -2,7 +2,8 @@
   "de": {
     "tools": {
       "create_bolt": { "name": "bolzen_erstellen", "description": "Erstellt einen Bolzen mit Sechskantkopf und Gewinde." },
-      "create_nut": { "name": "mutter_erstellen", "description": "Erstellt eine Sechskantmutter mit Innengewinde." },
+      "create_gear": { "name": "zahnrad_erstellen", "description": "Erstellt ein präzises, solides Zahnrad." },
+      "create_nut": { "name": "mutter_erstellen", "description": "Erstellt eine passende Mutter für einen Bolzen." },
       "create_new_design": { "name": "neue_konstruktion", "description": "Erstellt ein leeres Fusion 360 Dokument." },
       "cleanup_design": { "name": "design_bereinigen", "description": "Löscht alle Objekte im aktuellen Entwurf." },
       "save_document": { "name": "dokument_speichern", "description": "Speichert den aktuellen Stand in der Cloud." },
@@ -73,6 +74,8 @@
       "slot_drawn": "Langloch gezeichnet.",
       "thread_applied": "Gewinde '{name}' angewendet.",
       "material_applied": "Material '{name}' zugewiesen.",
+      "hole_created": "Bohrung erstellt.",
+      "gear_created": "Zahnrad '{name}' erfolgreich erstellt.",
       "sketch_created": "Skizze '{name}' erstellt.",
       "sketch_pattern_created": "Muster in Skizze erstellt.",
       "sketch_offset_created": "Versatz in Skizze erstellt."
@@ -116,6 +119,7 @@
       "get_timeline": { "name": "get_timeline", "description": "Returns a list of all operations in the Fusion 360 timeline." },
       "change_design_mode": { "name": "change_design_mode", "description": "Switch mode between 'Part' and 'Assembly'." },
       "create_revolve": { "name": "create_revolve", "description": "Creates a revolve body." },
+      "create_gear": { "name": "create_gear", "description": "Creates a spur gear with an involute-style tooth profile." },
       "create_circular_pattern": { "name": "create_circular_pattern", "description": "Creates a circular pattern of a body." },
       "create_fillet": { "name": "create_fillet", "description": "Creates fillets on all edges of a body." },
       "apply_material": { "name": "apply_material", "description": "Applies a material from the Fusion library to a body." },
@@ -164,6 +168,8 @@
       "slot_drawn": "Slot drawn.",
       "thread_applied": "Thread '{name}' applied.",
       "material_applied": "Material '{name}' applied.",
+      "hole_created": "Hole created.",
+      "gear_created": "Gear '{name}' created successfully.",
       "sketch_created": "Sketch '{name}' created.",
       "sketch_pattern_created": "Sketch pattern created.",
       "sketch_offset_created": "Sketch offset created."

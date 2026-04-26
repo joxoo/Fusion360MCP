@@ -73,26 +73,36 @@ def create_box_logic(l: float, w: float, h: float, name: str, x: float = 0, y: f
     """Creates a basic box at specified coordinates."""
     script = """
 try:
-    pt = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
-    s = root.sketches.add(root.xYConstructionPlane)
+    sketch_plane = root.xYConstructionPlane
+    if abs(params['z']) > 1e-9:
+        planes = root.constructionPlanes
+        plane_input = planes.createInput()
+        plane_input.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(params['z']))
+        sketch_plane = planes.add(plane_input)
+    pt = adsk.core.Point3D.create(params['x'], params['y'], 0)
+    s = root.sketches.add(sketch_plane)
     s.sketchCurves.sketchLines.addTwoPointRectangle(
         pt, adsk.core.Point3D.create(pt.x + params['l'], pt.y + params['w'], 0)
     )
-    prof = s.profiles.item(0)
-    box = root.features.extrudeFeatures.addSimple(
-        prof,
-        adsk.core.ValueInput.createByReal(params['h']),
-        adsk.fusion.FeatureOperations.NewBodyFeatureOperation
-    )
-    body = box.bodies.item(0)
-    body.name = params['name']
-    returnValue.append(body.name)
+    if s.profiles.count < 1:
+        returnValue.append("ERR_NO_PROFILE")
+    else:
+        prof = s.profiles.item(0)
+        box = root.features.extrudeFeatures.addSimple(
+            prof,
+            adsk.core.ValueInput.createByReal(params['h']),
+            adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+        )
+        body = box.bodies.item(0)
+        body.name = params['name']
+        returnValue.append(body.name)
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
     try:
         res = execute_fusion_script(script, {"l":l, "w":w, "h":h, "name":name, "x":x, "y":y, "z":z})
         val = res.get("data", [""])[0]
+        if val == "ERR_NO_PROFILE": return format_response(lang, "sketch_not_found")
         if val.startswith("ERR_"): return val
         return format_response(lang, "box_created", name=val)
     except FusionBridgeError as e: return f"Error: {str(e)}"
@@ -206,6 +216,8 @@ try:
     holes = root.features.holeFeatures
     h_in = holes.createSimpleInput(adsk.core.ValueInput.createByReal(params['d'] / 10.0))
     h_in.setPositionByPoint(root.xYConstructionPlane, pt)
+    # Use Negative direction as it often goes 'into' the body from the XY plane
+    h_in.setAllExtent(adsk.fusion.ExtentDirections.NegativeExtentDirection)
     holes.add(h_in)
     returnValue.append("OK")
 except Exception as e:
