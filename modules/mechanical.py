@@ -47,14 +47,21 @@ except Exception as e:
         return format_response(lang, "bolt_created", designation=f"M{val}")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def create_gear_logic(num_teeth: int, module: float, thickness: float = 1.0, x: float = 0, y: float = 0, hole_diameter: float = 0, pressure_angle: float = 20, lang: str = "en"):
+def create_gear_logic(num_teeth: int, module: float, thickness: float = 1.0, x: float = 0, y: float = 0, z: float = 0, hole_diameter: float = 0, pressure_angle: float = 20, lang: str = "en"):
     """Creates a spur gear using an involute-style tooth profile."""
     script = build_spur_gear_script()
     try:
-        res = execute_fusion_script(script, {"num_teeth": num_teeth, "module": module, "thickness": thickness, "x": x, "y": y, "hole_dia": hole_diameter, "pa": pressure_angle})
+        res = execute_fusion_script(
+            script,
+            {"num_teeth": num_teeth, "module": module, "thickness": thickness, "x": x, "y": y, "z": z, "hole_dia": hole_diameter, "pa": pressure_angle},
+            use_common=["placement"]
+        )
         val = res.get("data", [""])[0]
         if val == "ERR_PARAMS":
             return format_response(lang, "parameter_error", val="num_teeth>=4, module>0, thickness>0 required")
+        if isinstance(val, str) and val.startswith("ERR_HOLE_TOO_LARGE:"):
+            root_mm = val.split(":", 1)[1]
+            return format_response(lang, "parameter_error", val=f"hole_diameter must be smaller than root diameter ({root_mm} mm)")
         if val.startswith("ERR_"): return val
         return format_response(lang, "gear_created", name=val)
     except FusionBridgeError as e: return f"Error: {str(e)}"

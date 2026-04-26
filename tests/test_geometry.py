@@ -33,8 +33,8 @@ class TestGeometry(unittest.TestCase):
 
         self.assertEqual(res, "Box 'OffsetBox' created.")
         script = mock_post.call_args[1]['json']['payload']['script']
-        self.assertIn("plane_input.setByOffset(root.xYConstructionPlane", script)
-        self.assertIn("pt = adsk.core.Point3D.create(params['x'], params['y'], 0)", script)
+        self.assertIn("translate_body(body, params['x'], params['y'], params['z'])", script)
+        self.assertIn("move_input.defineAsTranslateXYZ(", script)
 
     @patch('core.bridge.requests.post')
     def test_create_hole_sets_extent(self, mock_post):
@@ -47,9 +47,12 @@ class TestGeometry(unittest.TestCase):
 
         self.assertEqual(res, "Hole created.")
         script = mock_post.call_args[1]['json']['payload']['script']
-        self.assertIn("h_in.setAllExtent(adsk.fusion.ExtentDirections.NegativeExtentDirection)", script)
+        self.assertIn("ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(1000.0))", script)
+        self.assertIn("plane = get_offset_plane(root.xYConstructionPlane, params['z'])", script)
+        self.assertIn("sketch.sketchCurves.sketchCircles.addByCenterRadius(center, params['d'] / 20.0)", script)
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['d'], 10)
+        self.assertEqual(params['z'], 0)
 
 if __name__ == '__main__':
     unittest.main()

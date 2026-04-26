@@ -21,6 +21,31 @@ def find_comp_recursive(root_comp, target_name):
         if occ.component.name == target_name: return occ.component
     return None
 """,
+    "placement": """
+def get_offset_plane(base_plane, offset):
+    if abs(offset) <= 1e-9:
+        return base_plane
+    planes = root.constructionPlanes
+    plane_input = planes.createInput()
+    plane_input.setByOffset(base_plane, adsk.core.ValueInput.createByReal(offset))
+    return planes.add(plane_input)
+
+def translate_body(body, x=0.0, y=0.0, z=0.0):
+    if abs(x) <= 1e-9 and abs(y) <= 1e-9 and abs(z) <= 1e-9:
+        return body
+    entities = adsk.core.ObjectCollection.create()
+    entities.add(body)
+    move_feats = root.features.moveFeatures
+    move_input = move_feats.createInput2(entities)
+    move_input.defineAsTranslateXYZ(
+        adsk.core.ValueInput.createByReal(x),
+        adsk.core.ValueInput.createByReal(y),
+        adsk.core.ValueInput.createByReal(z),
+        True
+    )
+    move_feats.add(move_input)
+    return body
+""",
     "setup_standard": """
 import adsk.core, adsk.fusion, traceback, math
 d = adsk.fusion.Design.cast(app.activeProduct)

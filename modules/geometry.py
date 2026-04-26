@@ -73,14 +73,8 @@ def create_box_logic(l: float, w: float, h: float, name: str, x: float = 0, y: f
     """Creates a basic box at specified coordinates."""
     script = """
 try:
-    sketch_plane = root.xYConstructionPlane
-    if abs(params['z']) > 1e-9:
-        planes = root.constructionPlanes
-        plane_input = planes.createInput()
-        plane_input.setByOffset(root.xYConstructionPlane, adsk.core.ValueInput.createByReal(params['z']))
-        sketch_plane = planes.add(plane_input)
-    pt = adsk.core.Point3D.create(params['x'], params['y'], 0)
-    s = root.sketches.add(sketch_plane)
+    pt = adsk.core.Point3D.create(0, 0, 0)
+    s = root.sketches.add(root.xYConstructionPlane)
     s.sketchCurves.sketchLines.addTwoPointRectangle(
         pt, adsk.core.Point3D.create(pt.x + params['l'], pt.y + params['w'], 0)
     )
@@ -94,13 +88,14 @@ try:
             adsk.fusion.FeatureOperations.NewBodyFeatureOperation
         )
         body = box.bodies.item(0)
+        translate_body(body, params['x'], params['y'], params['z'])
         body.name = params['name']
         returnValue.append(body.name)
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
     try:
-        res = execute_fusion_script(script, {"l":l, "w":w, "h":h, "name":name, "x":x, "y":y, "z":z})
+        res = execute_fusion_script(script, {"l":l, "w":w, "h":h, "name":name, "x":x, "y":y, "z":z}, use_common=["placement"])
         val = res.get("data", [""])[0]
         if val == "ERR_NO_PROFILE": return format_response(lang, "sketch_not_found")
         if val.startswith("ERR_"): return val
@@ -208,25 +203,30 @@ except Exception as e:
         return format_response(lang, "extrusion_created", name=sketch_name)
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def create_hole_logic(diameter_mm: float, x: float = 0, y: float = 0, lang: str = "en"):
+def create_hole_logic(diameter_mm: float, x: float = 0, y: float = 0, lang: str = "en", z: float = 0):
     """Creates a simple hole in the active design."""
     script = """
 try:
-    pt = adsk.core.Point3D.create(params['x'], params['y'], 0)
-    holes = root.features.holeFeatures
-    h_in = holes.createSimpleInput(adsk.core.ValueInput.createByReal(params['d'] / 10.0))
-    h_in.setPositionByPoint(root.xYConstructionPlane, pt)
-    # Use Negative direction as it often goes 'into' the body from the XY plane
-    h_in.setAllExtent(adsk.fusion.ExtentDirections.NegativeExtentDirection)
-    holes.add(h_in)
-    returnValue.append("OK")
+    plane = get_offset_plane(root.xYConstructionPlane, params['z'])
+    sketch = root.sketches.add(plane)
+    center = adsk.core.Point3D.create(params['x'], params['y'], 0)
+    sketch.sketchCurves.sketchCircles.addByCenterRadius(center, params['d'] / 20.0)
+    if sketch.profiles.count < 1:
+        returnValue.append("ERR_NO_PROFILE")
+    else:
+        extrudes = root.features.extrudeFeatures
+        ext_in = extrudes.createInput(sketch.profiles.item(0), adsk.fusion.FeatureOperations.CutFeatureOperation)
+        ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(1000.0))
+        extrudes.add(ext_in)
+        returnValue.append("OK")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
     try:
-        res = execute_fusion_script(script, {"d": diameter_mm, "x": x, "y": y})
+        res = execute_fusion_script(script, {"d": diameter_mm, "x": x, "y": y, "z": z}, use_common=["placement"])
         val = res.get("data", [""])[0]
         if val == "OK": return format_response(lang, "hole_created")
+        if val == "ERR_NO_PROFILE": return format_response(lang, "sketch_not_found")
         return f"Error: {val}"
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
