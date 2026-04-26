@@ -1,6 +1,40 @@
+def build_create_bolt_script() -> str:
+    return """try:
+    radius_cm = (params['dia_mm'] / 10.0) / 2.0
+    s = root.sketches.add(root.xYConstructionPlane)
+    s.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(0, 0, 0), radius_cm)
+    prof = s.profiles.item(0)
+    ext = root.features.extrudeFeatures.addSimple(prof, adsk.core.ValueInput.createByReal(params['length']), 0)
+    body = ext.bodies.item(0)
+    threads = root.features.threadFeatures
+    face = next((f for f in body.faces if f.geometry.surfaceType == adsk.core.SurfaceTypes.CylinderSurfaceType), None)
+    if face:
+        q = threads.threadDataQuery
+        t_type = 'ISO Metric profile'
+        dia_val = float(params['dia_mm'])
+        all_sizes = q.allSizes(t_type)
+        size = str(params['dia_mm'])
+        if size not in all_sizes:
+            size = "{:.1f}".format(dia_val)
+            if size not in all_sizes: size = "{:.0f}.0".format(dia_val)
+        desigs = q.allDesignations(t_type, size)
+        if len(desigs) > 0:
+            actual_desig = desigs[0]
+            classes = q.allClasses(False, t_type, actual_desig)
+            actual_class = classes[0] if len(classes) > 0 else ""
+            t_info = adsk.fusion.ThreadInfo.create(False, False, t_type, actual_desig, actual_class, True)
+            t_input = threads.createInput(face, t_info)
+            t_input.isModeled = params['modeled']
+            threads.add(t_input)
+            returnValue.append(size)
+        else: returnValue.append("ERR_NO_THREAD")
+    else: returnValue.append("ERR_NO_FACE")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
 def build_spur_gear_script() -> str:
-    return """
-import math
+    return """import math
 try:
     m = float(params['module'])
     n = int(params['num_teeth'])
@@ -148,5 +182,4 @@ try:
                         gear_base.name = f"Gear_M{m}_Z{n}"
                         returnValue.append(gear_base.name)
 except Exception as e:
-    returnValue.append(f"ERR_API:{str(e)}")
-"""
+    returnValue.append(f"ERR_API:{str(e)}")"""

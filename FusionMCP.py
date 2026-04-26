@@ -7,6 +7,8 @@ import os
 import signal
 import shutil
 import sys
+import io
+import contextlib
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -64,6 +66,9 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                 script = payload.get('script', '')
                 params = payload.get('params', {})
                 
+                # Sanitize script: convert CRLF to LF and strip trailing whitespace
+                script = script.replace('\r\n', '\n').strip()
+                
                 log_msg = f"Executing: {script[:50]}..." if len(script) > 50 else f"Executing: {script}"
                 add_to_log(log_msg)
                 
@@ -76,7 +81,16 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                 }
                 
                 try:
-                    exec(script, exec_globals)
+                    # Redirect stdout to capture print() statements
+                    f = io.StringIO()
+                    with contextlib.redirect_stdout(f):
+                        exec(script, exec_globals)
+                    
+                    # Add captured stdout to returnValue if it's not empty
+                    stdout_content = f.getvalue().strip()
+                    if stdout_content:
+                        exec_globals['returnValue'].append(stdout_content)
+                        
                     last_result = {"status": "success", "data": exec_globals['returnValue'], "error": None}
                     add_to_log("Result: Success")
                 except Exception as e:

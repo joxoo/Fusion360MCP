@@ -46,11 +46,9 @@ def translate_body(body, x=0.0, y=0.0, z=0.0):
     move_feats.add(move_input)
     return body
 """,
-    "setup_standard": """
-import adsk.core, adsk.fusion, traceback, math
+    "setup_standard": """import adsk.core, adsk.fusion, traceback, math
 d = adsk.fusion.Design.cast(app.activeProduct)
-root = d.rootComponent
-"""
+root = d.rootComponent"""
 }
 
 _I18N_DATA = None
@@ -80,48 +78,50 @@ def format_response(lang, key, **kwargs):
     except Exception:
         return message
 
-def register_tool(mcp, tool_key, func, param_aliases=None):
+def register_tool(mcp, tool_key, func):
     """
-    Simpler registration that uses FastMCP native tool decorator.
+    Register a tool with the MCP server using its canonical name.
     """
     i18n = load_i18n()
-
-    # Define wrappers for each language
-    for lang in ("de", "en"):
-        config = i18n.get(lang, {}).get("tools", {}).get(tool_key)
-        if not config: continue
+    
+    # Always use the English description for the MCP schema
+    en_config = i18n.get("en", {}).get("tools", {}).get(tool_key, {})
+    desc = en_config.get("description", func.__doc__ or "")
+    
+    # We wrap the function to:
+    # 1. Provide a default 'lang' if not provided by the client
+    # 2. Be robust against extra arguments (like wait_for_previous) via **kwargs
+    @functools.wraps(func)
+    def wrapper(**kwargs):
+        # Determine the target language (default to English)
+        lang = kwargs.pop('lang', 'en')
         
-        name = config.get("name")
-        desc = config.get("description", "")
-        alias_map = config.get("param_aliases", {})
+        # Filter kwargs to only include what the original function actually accepts
+        sig = inspect.signature(func)
+        filtered_kwargs = {
+            k: v for k, v in kwargs.items() 
+            if k in sig.parameters
+        }
         
-        if name:
-            # We create a specific function for FastMCP to inspect
-            # This function must match the canonical logic but with localized names
+        # If the function expects 'lang', pass it
+        if 'lang' in sig.parameters:
+            filtered_kwargs['lang'] = lang
             
-            orig_sig = inspect.signature(func)
-            params = [p for n, p in orig_sig.parameters.items() if n != 'lang']
-            
-            # Map parameters to localized names
-            loc_params = []
-            for p in params:
-                loc_name = alias_map.get(p.name, p.name)
-                loc_params.append(p.replace(name=loc_name))
-            
-            new_sig = orig_sig.replace(parameters=loc_params)
-
-            def create_closure(target_lang, local_alias_map):
-                reverse_map = {v: k for k, v in local_alias_map.items()}
-                
-                @functools.wraps(func)
-                def tool_func(**kwargs):
-                    # Map back to canonical
-                    canonical_kwargs = {reverse_map.get(k, k): v for k, v in kwargs.items()}
-                    return func(lang=target_lang, **canonical_kwargs)
-                
-                # Re-apply the localized signature and annotations so FastMCP sees them
-                tool_func.__signature__ = new_sig
-                tool_func.__annotations__ = {alias_map.get(k, k): v for k, v in func.__annotations__.items() if k != 'lang'}
-                return tool_func
-
-            mcp.tool(name=name, description=desc)(create_closure(lang, alias_map))
+        return func(**filtered_kwargs)
+    
+    # Build a clean signature for FastMCP inspection (client-facing schema)
+    # We remove 'lang' from the public schema as it's usually handled internally
+    orig_sig = inspect.signature(func)
+    public_params = [
+        p for name, p in orig_sig.parameters.items() 
+        if name != 'lang'
+    ]
+    
+    wrapper.__signature__ = orig_sig.replace(parameters=public_params)
+    wrapper.__annotations__ = {
+        k: v for k, v in func.__annotations__.items() 
+        if k != 'lang'
+    }
+    
+    # Register under the canonical tool_key (e.g., 'create_box')
+    mcp.tool(name=tool_key, description=desc)(wrapper)

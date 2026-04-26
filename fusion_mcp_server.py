@@ -19,6 +19,7 @@ from modules.analysis import register_analysis_tools
 from modules.parameters import register_parameter_tools
 from modules.assembly import register_assembly_tools
 from modules.sketch import register_sketch_tools
+from modules.advanced_geometry import register_advanced_geometry_tools
 
 # Create the MCP server instance
 mcp = FastMCP("Fusion360")
@@ -33,6 +34,7 @@ register_analysis_tools(mcp)
 register_parameter_tools(mcp)
 register_assembly_tools(mcp)
 register_sketch_tools(mcp)
+register_advanced_geometry_tools(mcp)
 
 from modules.design import create_new_design_logic
 @mcp.tool(name="test_new_design")
