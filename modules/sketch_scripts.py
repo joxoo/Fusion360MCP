@@ -182,6 +182,78 @@ except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
+def build_sketch_project_script() -> str:
+    return """try:
+    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    target_body = find_body_recursive(root, params['body'])
+    if s and target_body:
+        entities = adsk.core.ObjectCollection.create()
+        # Project all edges of the body for simplicity, or specific ones if needed
+        for edge in target_body.edges:
+            s.project(edge)
+        returnValue.append("OK")
+    else: returnValue.append("ERR_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_draw_sketch_text_script() -> str:
+    return """try:
+    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    if s:
+        texts = s.sketchTexts
+        point = adsk.core.Point3D.create(params['x'], params['y'], 0)
+        t_input = texts.createInput(params['text'], params['height'], point)
+        t_input.fontName = params.get('font', 'Arial')
+        texts.add(t_input)
+        returnValue.append("OK")
+    else: returnValue.append("ERR_SKETCH")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_draw_ellipse_script() -> str:
+    return """try:
+    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    if s:
+        center = adsk.core.Point3D.create(params['cx'], params['cy'], 0)
+        major = adsk.core.Point3D.create(params['mx'], params['my'], 0)
+        on_ellipse = adsk.core.Point3D.create(params['ox'], params['oy'], 0)
+        s.sketchCurves.sketchEllipses.add(center, major, on_ellipse)
+        returnValue.append("OK")
+    else: returnValue.append("ERR_SKETCH")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_sketch_mirror_script() -> str:
+    return """try:
+    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    if s:
+        # Mirroring in API is done by creating geometry and adding Symmetry Constraints
+        # Simplified: We just report that we can't easily auto-mirror arbitrary sets yet
+        # but we could implement specific cases.
+        returnValue.append("ERR_NOT_IMPLEMENTED_DYNAMICALLY")
+    else: returnValue.append("ERR_SKETCH")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_sketch_trim_script() -> str:
+    return """try:
+    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    if s:
+        # Trim requires a point on the segment to remove
+        # We try to trim the first line found near the point
+        pt = adsk.core.Point3D.create(params['x'], params['y'], 0)
+        # In API, trim() is called on the curve object
+        # This is hard to automate without knowing which curve.
+        returnValue.append("ERR_REQUIRES_SPECIFIC_CURVE")
+    else: returnValue.append("ERR_SKETCH")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
 def build_draw_slot_script() -> str:
     return """try:
     s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)

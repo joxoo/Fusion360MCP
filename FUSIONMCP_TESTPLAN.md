@@ -1,72 +1,92 @@
-# Testplan: FusionMCP (Standard-konforme KI-Tests)
+# Ultimate Testplan: FusionMCP (Standard-konforme Profi-Tests)
 
 ## Ziel
-Dieser Testplan dient der Verifizierung des FusionMCP Servers durch einen KI-Agenten. Er nutzt ausschließlich die **kanonischen englischen Werkzeugnamen**, um universelle Kompatibilität mit allen MCP-Clients (Gemini, Claude, Cursor etc.) sicherzustellen.
+Dieser Testplan dient der vollständigen Verifizierung aller Fusion 360 MCP-Module. Er nutzt ausschließlich die **kanonischen englischen Werkzeugnamen** und deckt den gesamten Workflow vom Concept-Design bis zur Fertigungsprüfung ab.
 
-## Testprinzip
-- Jeder Test startet von einem bekannten Zustand.
-- Vor jedem Block soll `cleanup_design()` aufgerufen werden.
-- Ein Test gilt als bestanden, wenn die MCP-Antwort plausibel ist und das Ergebnis in Fusion 360 korrekt erzeugt wurde.
+---
 
-## Transport und Voraussetzungen
+## 1. Konnektivität & Basis
+- **Status-Check:** `curl -s http://localhost:8081/mcp` -> `mcp_server_online`
+- **Cleanup:** `cleanup_design()` -> Konstruktion leer.
+- **New Doc:** `create_new_design()` -> Frisches Dokument.
+- **Parameter:** `manage_parameter(name="Breite", expression="50mm")` -> Erstellt.
+- **List Params:** `list_parameters()` -> JSON mit "Breite" enthalten.
 
-### Fusion-Seite
-- Fusion 360 aktiv.
-- Add-In `FusionMCP` läuft.
-- Bridge erreichbar unter `http://localhost:8082`.
+---
 
-### MCP-Seite
-- MCP-Server erreichbar unter `http://localhost:8081/mcp/sse`.
+## 2. Solid Modeling (Das "Create" Menü)
+- **Primitives:**
+  - `create_box(l=10, w=10, h=10, name="Base")`
+  - `create_cylinder(r=5, h=20, name="Pillar")`
+  - `create_sphere(r=5, name="Ball")`
+  - `create_coil(dia=10, h=30, p=5, sec_t=2, name="Spring")`
+- **Sketch-based:**
+  - `create_sketch(name="Profile", plane_name="XY")` + `draw_circle(...)`
+  - `create_revolve(sketch_name="Profile", axis="Z", angle=360)` -> Toroidaler Körper.
+  - `create_loft(sketch_names=["S1", "S2"])` -> Übergangskörper.
+- **Holes & Threads:**
+  - `create_hole_advanced(body="Base", dia=8, depth=20, hole_type="Counterbore", cb_dia=12, cb_depth=5)` -> Profi-Bohrung.
+  - `apply_custom_thread(body_name="Pillar", thread_type="ISO Metric profile", size="10")` -> Gewinde.
 
-## Ausführungsreihenfolge
+---
 
-### 1. Konnektivität
-- Aktion: `curl -s http://localhost:8081/mcp`
-- Erwartet: `status: "mcp_server_online"`
+## 3. Surface Design (Freiform-Flächen)
+- **Creation:** `create_surface_cylinder(r=10, h=50, name="Hull")`
+- **Modification:** 
+  - `extend_surface(body="Hull", distance=5)` -> Verlängert.
+  - `trim_surface(body="Hull", tool_sketch="TrimLine")` -> Beschnitten.
+- **Solid-Weg:** `stitch_surfaces(body_names=["S1", "S2"])` -> Solid.
 
-### 2. Dokumentsteuerung
-- **Cleanup:** `cleanup_design()` -> Erwartet: `Design cleaned up.`
-- **New Design:** `create_new_design()` -> Erwartet: `Design created.`
+---
 
-### 3. Basis-Skizzen
-- **Create Sketch:** `create_sketch(plane_name="XY", name="S1")` -> Erwartet: `Sketch 'S1' created.`
-- **Line:** `draw_line(sketch_name="S1", x1=0, y1=0, x2=5, y2=0)` -> Erwartet: `Line drawn.`
-- **Circle:** `draw_circle(sketch_name="S1", x=10, y=10, radius=3)` -> Erwartet: `Circle drawn.`
-- **Rectangle:** `draw_rectangle(sketch_name="S1", x1=15, y1=0, x2=20, y2=5)` -> Erwartet: `Rectangle drawn.`
+## 4. Mesh Tools (3D-Druck & Scans)
+- **Import:** `import_mesh(path="/pfad/zu/modell.stl")` -> Mesh geladen.
+- **Prepare:**
+  - `generate_face_groups(body="Mesh1")` -> Gruppen erkannt.
+  - `repair_mesh(body="Mesh1")` -> Wasserdicht.
+- **Convert:** `convert_mesh(body="Mesh1", conv_type="infoPrismatic")` -> B-Rep Solid erstellt.
 
-### 4. Skizzen-Modifikatoren
-- **Circular Pattern:** `sketch_circular_pattern(sketch_name="S1", center_x=0, center_y=0, count: 6)` -> Erwartet: `Sketch pattern created.`
-- **Offset (Frische Skizze):** 
-  - `create_sketch(name="OffsetTest", plane_name="XY")`
-  - `draw_circle(sketch_name="OffsetTest", x=0, y=0, radius=5)`
-  - `sketch_offset(sketch_name="OffsetTest", distance=1.0)`
-  - Erwartet: `Sketch offset created.`
+---
 
-### 5. 3D-Operationen
-- **Extrude:** `extrude_sketch(sketch_name="S1", distance=2.0)` -> Erwartet: Body in Fusion sichtbar.
-- **Fillet:** `create_fillet(body_name="Body1", radius=0.5)` -> Erwartet: `Fillet created.`
-- **Shell:** `create_shell(body="Body1", thickness=0.2)` -> Erwartet: `Shell created.`
-- **Mirror:** `mirror_body(body="Body1", plane_name="YZ")` -> Erwartet: `Mirror created.`
+## 5. Form Design (Organische T-Splines)
+- **Creation:** `create_form_box(l=10, w=10, h=10, name="Organic")`
+- **Modification:**
+  - `subdivide_form_face(body="Organic")` -> Mehr Details.
+  - `create_form_crease(body="Organic")` -> Scharfe Kante.
+- **Symmetry:** `create_form_mirror_internal(body="Organic")` -> Grüne Symmetrie-Linie sichtbar.
 
-### 6. Mechanische Komponenten
-- **Bolt:** `create_bolt(diameter_mm=8, length_cm=5, modeled=True)` -> Erwartet: `Bolt M8... created.`
-- **Gear:** `create_gear(num_teeth=20, module=2.0, thickness=1.0)` -> Erwartet: `Gear created.`
+---
 
-### 7. Fortgeschrittene Geometrie (NEU)
-- **Loft:** 
-  - Erzeuge `S1` bei Z=0 und `S2` (Offset) bei Z=10.
-  - Aufruf: `create_loft(sketch_names=["S1", "S2"])`
-  - Erwartet: Verbindungskörper zwischen beiden Skizzen.
-- **Appearance:** `apply_appearance(body="Body1", appearance="Red")` -> Erwartet: Körper in Fusion wird rot.
+## 6. Professional Modification (Direct Modeling)
+- **Combine:** `combine_bodies(target="Base", tool_bodies=["Pillar"], operation="Cut")` -> Loch in Base.
+- **Direct Edit:**
+  - `delete_face(body="Base", face_index=0)` -> Feature entfernt.
+  - `offset_face(body="Base", dist=2.0)` -> Maß geändert.
+- **Transform:** `move_body(body="Base", x=5, y=0, z=0, angle=45)` -> Verschoben & rotiert.
 
-### 8. Analyse & Messen (NEU)
-- **Mass Center:** `get_center_of_mass(body="Body1")` -> Erwartet: X,Y,Z Koordinaten.
-- **Distance:** `measure_distance(body1="Body1", body2="Body2")` -> Erwartet: Distanz in cm.
+---
 
-### 9. Analyse & Export
-- **Screenshot:** `capture_view()` -> Erwartet: Base64-Daten.
-- **STL Export:** `export_stl(filename="test_model")` -> Erwartet: Pfad zur Datei.
-- **STEP Export (NEU):** `export_step(filename="test_model")` -> Erwartet: Erfolgreicher Export.
+## 7. Assembly & Baugruppen
+- **Structure:** `create_component(name="Motor")` -> Unterstruktur erstellt.
+- **Joints:** `create_joint(comp1="Motor", comp2="Gehäuse", joint_type="Revolute")` -> Bewegliche Verbindung.
+- **Check:** `check_interference(body_names=["B1", "B2"])` -> Liefert Interferenz-Anzahl.
 
-## Ergebnisformat
+---
+
+## 8. Analyse & Export
+- **Physics:** `get_volumetric_properties(body="Base")` -> Masse, Volumen, Trägheit.
+- **Dimensions:** `get_bounding_box(body="Base")` -> Länge, Breite, Höhe.
+- **Visuals:** `capture_view()` -> Screenshot.
+- **Export:** `export_step(filename="final_model")` -> STEP-Datei erzeugt.
+
+---
+
+## Ergebnis-Matrix
+| Task | Modul | Status | Bemerkung |
+| :--- | :--- | :--- | :--- |
+| 1 | Core/Bridge | [ ] | Multi-line & Stdout |
+| 2 | Registration | [ ] | Canonical Names |
+| 3-6 | Solid/Surface/Mesh/Form | [ ] | Komplett |
+| 7 | Analysis/Assembly | [ ] | Interferenz & Physik |
+
 Tests sind mit `[PASS]` oder `[FAIL]` zu kennzeichnen.

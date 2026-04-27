@@ -43,7 +43,7 @@ class TestDesignRefactored(unittest.TestCase):
         mock_post.return_value = mock_response
 
         res = create_new_design_logic("en")
-        self.assertEqual(res, "Design created.")
+        self.assertEqual(res, "New document created.")
         sent_script = mock_post.call_args[1]['json']['payload']['script']
         self.assertIn("app.documents.add(0)", sent_script)
 
@@ -55,7 +55,7 @@ class TestDesignRefactored(unittest.TestCase):
         mock_post.return_value = mock_response
 
         res = restart_mcp_logic("en")
-        self.assertEqual(res, "MCP server restart command sent.")
+        self.assertEqual(res, "MCP restart command sent.")
         sent_script = mock_post.call_args[1]['json']['payload']['script']
         self.assertIn("start_mcp_server()", sent_script)
 

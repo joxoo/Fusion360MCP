@@ -6,11 +6,34 @@ import inspect
 # Common Fusion 360 script fragments
 COMMON_FUSION_SCRIPTS = {
     "find_body": """
+import unicodedata
+def normalize_name(name):
+    if not name: return ""
+    return " ".join(unicodedata.normalize('NFKC', str(name)).casefold().strip().split())
+
+def ascii_fold_name(name):
+    return ''.join(ch for ch in unicodedata.normalize('NFKD', normalize_name(name)) if not unicodedata.combining(ch))
+
+def names_match(left, right):
+    norm_left = normalize_name(left)
+    norm_right = normalize_name(right)
+    if norm_left == norm_right:
+        return True
+    return ascii_fold_name(left) == ascii_fold_name(right)
+
 def find_body_recursive(component, target_name):
     for b in component.bRepBodies:
-        if b.name == target_name or not target_name: return b
+        if not target_name or names_match(b.name, target_name): return b
     for occ in component.occurrences:
         res = find_body_recursive(occ.component, target_name)
+        if res: return res
+    return None
+
+def find_sketch_recursive(component, target_name):
+    for s in component.sketches:
+        if not target_name or names_match(s.name, target_name): return s
+    for occ in component.occurrences:
+        res = find_sketch_recursive(occ.component, target_name)
         if res: return res
     return None
 """,
@@ -88,40 +111,6 @@ def register_tool(mcp, tool_key, func):
     en_config = i18n.get("en", {}).get("tools", {}).get(tool_key, {})
     desc = en_config.get("description", func.__doc__ or "")
     
-    # We wrap the function to:
-    # 1. Provide a default 'lang' if not provided by the client
-    # 2. Be robust against extra arguments (like wait_for_previous) via **kwargs
-    @functools.wraps(func)
-    def wrapper(**kwargs):
-        # Determine the target language (default to English)
-        lang = kwargs.pop('lang', 'en')
-        
-        # Filter kwargs to only include what the original function actually accepts
-        sig = inspect.signature(func)
-        filtered_kwargs = {
-            k: v for k, v in kwargs.items() 
-            if k in sig.parameters
-        }
-        
-        # If the function expects 'lang', pass it
-        if 'lang' in sig.parameters:
-            filtered_kwargs['lang'] = lang
-            
-        return func(**filtered_kwargs)
-    
-    # Build a clean signature for FastMCP inspection (client-facing schema)
-    # We remove 'lang' from the public schema as it's usually handled internally
-    orig_sig = inspect.signature(func)
-    public_params = [
-        p for name, p in orig_sig.parameters.items() 
-        if name != 'lang'
-    ]
-    
-    wrapper.__signature__ = orig_sig.replace(parameters=public_params)
-    wrapper.__annotations__ = {
-        k: v for k, v in func.__annotations__.items() 
-        if k != 'lang'
-    }
-    
-    # Register under the canonical tool_key (e.g., 'create_box')
-    mcp.tool(name=tool_key, description=desc)(wrapper)
+    # Register the original function directly. 
+    # This allows FastMCP to correctly inspect type hints and default values.
+    mcp.tool(name=tool_key, description=desc)(func)

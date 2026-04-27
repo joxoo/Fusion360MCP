@@ -13,15 +13,56 @@ from modules.sketch_scripts import (
     build_draw_polygon_script,
     build_draw_spline_script,
     build_draw_slot_script,
+    build_sketch_project_script,
+    build_draw_sketch_text_script,
+    build_draw_ellipse_script,
+    build_sketch_mirror_script,
+    build_sketch_trim_script,
 )
 
 def _handle_sketch_result(res, lang: str, success_key: str, **kwargs):
     val = res.get("data", [""])[0]
     if val in {"ERR_SKETCH", "ERR_SKETCH_NOT_FOUND"}:
         return format_response(lang, "sketch_not_found")
+    if val == "ERR_NOT_FOUND": return "Error: Target body or sketch not found."
     if isinstance(val, str) and val.startswith("ERR_API:"):
         return val
     return format_response(lang, success_key, **kwargs)
+
+def sketch_project_logic(sketch_name: str, body_name: str, lang: str = "en"):
+    """Projects all edges of a body into a sketch."""
+    try:
+        res = execute_fusion_script(build_sketch_project_script(), {"sketch": sketch_name, "body": body_name}, use_common=["find_body"])
+        return _handle_sketch_result(res, lang, "sketch_projected") # We need a new i18n key or generic OK
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def draw_sketch_text_logic(sketch_name: str, text: str, x: float, y: float, height: float = 1.0, font: str = "Arial", lang: str = "en"):
+    """Adds text to a sketch."""
+    try:
+        res = execute_fusion_script(build_draw_sketch_text_script(), {"sketch": sketch_name, "text": text, "x": x, "y": y, "height": height, "font": font})
+        return _handle_sketch_result(res, lang, "text_added") # Need i18n
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def draw_ellipse_logic(sketch_name: str, cx: float, cy: float, mx: float, my: float, ox: float, oy: float, lang: str = "en"):
+    """Draws an ellipse in a sketch."""
+    try:
+        res = execute_fusion_script(build_draw_ellipse_script(), {"sketch": sketch_name, "cx": cx, "cy": cy, "mx": mx, "my": my, "ox": ox, "oy": oy})
+        return _handle_sketch_result(res, lang, "ellipse_drawn") # Need i18n
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def sketch_mirror_logic(sketch_name: str, lang: str = "en"):
+    """Placeholder for sketch mirroring (Complex API)."""
+    try:
+        res = execute_fusion_script(build_sketch_mirror_script(), {"sketch": sketch_name})
+        return _handle_sketch_result(res, lang, "mirror_logic_called")
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def sketch_trim_logic(sketch_name: str, x: float, y: float, lang: str = "en"):
+    """Trims a curve segment at a point."""
+    try:
+        res = execute_fusion_script(build_sketch_trim_script(), {"sketch": sketch_name, "x": x, "y": y})
+        return _handle_sketch_result(res, lang, "trim_logic_called")
+    except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def create_sketch_logic(plane_name: str = "XY", name: str = "Sketch1", lang: str = "en"):
     """Creates a new sketch on a specific plane."""
@@ -138,3 +179,8 @@ def register_sketch_tools(mcp):
     register_tool(mcp, "sketch_circular_pattern", create_sketch_circular_pattern_logic)
     register_tool(mcp, "sketch_rectangular_pattern", create_sketch_rectangular_pattern_logic)
     register_tool(mcp, "sketch_offset", create_sketch_offset_logic)
+    register_tool(mcp, "sketch_project", sketch_project_logic)
+    register_tool(mcp, "draw_sketch_text", draw_sketch_text_logic)
+    register_tool(mcp, "draw_ellipse", draw_ellipse_logic)
+    register_tool(mcp, "sketch_mirror", sketch_mirror_logic)
+    register_tool(mcp, "sketch_trim", sketch_trim_logic)
