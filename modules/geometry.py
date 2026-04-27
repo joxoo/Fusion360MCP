@@ -422,12 +422,20 @@ def create_edge_fillet_logic(body: str, radius: float, lang: str = "en"):
         return format_response(lang, "fillet_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def extrude_sketch_logic(sketch_name: str, distance: float, lang: str = "en"):
-    """Extrudes the first profile of a sketch."""
+def extrude_sketch_logic(sketch_name: str, distance: float, lang: str = "en", profile_index: int = None, op: str = "NewBody", offset: float = 0, target_body: str = None):
+    """Extrudes profiles of a sketch. Supports single profile selection, operations (Join, Cut, NewBody), start offset, and targeted body selection."""
     try:
-        res = execute_fusion_script(build_extrude_sketch_script(), {"sketch": sketch_name, "dist": distance})
+        res = execute_fusion_script(build_extrude_sketch_script(), {
+            "sketch": sketch_name, 
+            "dist": distance,
+            "profile_index": profile_index,
+            "op": op,
+            "offset": offset,
+            "target_body": target_body
+        }, use_common=["find_body"])
         val = res.get("data", [""])[0]
         if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
+        if val == "ERR_NO_PROFILE": return format_response(lang, "sketch_not_found")
         return format_response(lang, "extrusion_created", name=sketch_name)
     except FusionBridgeError as e: return f"Error: {str(e)}"
 

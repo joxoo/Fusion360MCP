@@ -24,6 +24,9 @@ Dieser Testplan dient der vollständigen Verifizierung aller Fusion 360 MCP-Modu
   - `create_coil(...)` -> [EXPECTED: ERR_UNSUPPORTED] (Kommando im API-Kontext nicht ausführbar).
 - **Sketch-based:**
   - `create_sketch(name="Profile", plane_name="XY")` + `draw_circle(...)`
+  - `create_sketch(name="TopSketch", body_name="Base", face_index=1)` -> Skizze auf Oberfläche.
+  - `draw_sketch_text(sketch_name="TopSketch", text="TEST", height=5, x=0, y=0)` -> Text-Objekt.
+  - `extrude_sketch(sketch_name="TopSketch", distance=-2, op="Cut")` -> **Text-Gravur** (bestätigt alle Profile + Text Support).
   - `create_revolve(sketch_name="Profile", axis="Z", angle=360)` -> Toroidaler Körper.
   - `create_sweep_advanced(profile_sketch="S1", path_sketch="P1", twist=15)` -> Verdrehter Flügel.
   - `create_loft(sketch_names=["S1", "S2"])` -> Übergangskörper.
@@ -49,16 +52,18 @@ Dieser Testplan dient der vollständigen Verifizierung aller Fusion 360 MCP-Modu
   - `repair_mesh(body="Mesh1")` -> Wasserdicht.
 - **Convert:** `convert_mesh(body="Mesh1", conv_type="infoPrismatic")` -> B-Rep Solid erstellt.
 
+Hinweis:
+- Dieser Block ist nur ausführbar, wenn eine reale Mesh-Datei bereitliegt. Ohne Testdatei ist der Mesh-Abschnitt als `[SKIP]` zu markieren, nicht als `[FAIL]`.
+
 ---
 
 ## 5. Form Design (Organische T-Splines)
 - **Primitives (Eingeschränkt):**
   - `create_form_box`, `create_form_sphere`, etc. -> [EXPECTED: ERR_UNSUPPORTED] (Runtime-Exponierung fehlt).
 - **Modification (Edit):**
-  - `insert_form_edge(body="Organic")` -> Kante eingefügt.
-  - `subdivide_form_face(body="Organic")` -> Mehr Details.
-  - `create_form_crease(body="Organic")` -> Scharfe Kante.
-- **Symmetry:** `create_form_mirror_internal(body="Organic")` -> Grüne Symmetrie-Linie sichtbar.
+  - `insert_form_edge(body="Organic")`, `subdivide_form_face(body="Organic")`, `create_form_crease(body="Organic")`, `create_form_mirror_internal(body="Organic")`
+  - Diese Schritte setzen einen bereits existierenden gültigen T-Spline-Body voraus.
+  - Wenn keine Form-Primitiverzeugung verfügbar ist und kein externer T-Spline-Body geladen wurde, ist der komplette Edit-Block als `[SKIP]` zu markieren.
 
 ---
 
@@ -102,4 +107,8 @@ Dieser Testplan dient der vollständigen Verifizierung aller Fusion 360 MCP-Modu
 | 3-6 | Solid/Timeline | [ ] | Feature Patterns & History |
 | 7 | Validierung | [ ] | Manifold & Standard Views |
 
-Tests sind mit `[PASS]` oder `[FAIL]` zu kennzeichnen.
+Statusregeln:
+- `[PASS]` wenn der Schritt erfolgreich ausgeführt wurde.
+- `[FAIL]` wenn ein unterstützter Schritt fehlschlägt.
+- `[SKIP]` wenn eine dokumentierte Voraussetzung fehlt, z. B. Mesh-Datei oder T-Spline-Startkörper.
+- `[EXPECTED]` wenn ein dokumentierter Unsupported-Pfad genau wie beschrieben eintritt.

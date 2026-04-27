@@ -64,11 +64,18 @@ def sketch_trim_logic(sketch_name: str, x: float, y: float, lang: str = "en"):
         return _handle_sketch_result(res, lang, "trim_logic_called")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
-def create_sketch_logic(plane_name: str = "XY", name: str = "Sketch1", lang: str = "en"):
-    """Creates a new sketch on a specific plane."""
+def create_sketch_logic(plane_name: str = "XY", name: str = "Sketch1", lang: str = "en", body_name: str = None, face_index: int = 0):
+    """Creates a new sketch on a specific plane or a body face."""
     try:
-        res = execute_fusion_script(build_create_sketch_script(), {"plane": plane_name, "name": name})
+        res = execute_fusion_script(build_create_sketch_script(), {
+            "plane": plane_name, 
+            "name": name,
+            "body": body_name,
+            "face_index": face_index
+        }, use_common=["find_body"])
         val = res.get("data", [""])[0]
+        if val == "ERR_BODY_OR_FACE_NOT_FOUND":
+            return "Error: Target body or face index not found."
         if isinstance(val, str) and val.startswith("ERR_"):
             return val
         return format_response(lang, "sketch_created", name=val)

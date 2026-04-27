@@ -2,6 +2,18 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [9.1.0] - 2026-04-27
+### Hinzugefügt
+- **Text-Extrusion:** `extrude_sketch` unterstützt nun die Extrusion von `SketchText`-Objekten. Text wird automatisch in die Profilsammlung aufgenommen.
+- **Skizzen auf Flächen:** `create_sketch` ermöglicht das Erstellen von Skizzen direkt auf Körperflächen (`body_name`, `face_index`).
+- **Erweiterte Extrusions-Operationen:** Unterstützung für `Join`, `Cut`, `Intersect`, `NewBody` und `NewComponent` in `extrude_sketch`.
+- **Extrusions-Offset:** Neuer Parameter `offset` für `extrude_sketch`, um Extrusionen mit einem Versatz zur Skizzen-Ebene zu starten.
+- **Zielkörper-Selektion:** `extrude_sketch` erlaubt die gezielte Auswahl von `participantBodies` für boolesche Operationen.
+- **Auto-Targeting:** Bei `Cut` und `Join` ohne expliziten Zielkörper werden automatisch alle Körper der aktiven Komponente als Ziele einbezogen (behebt "Kein Zielkörper gefunden").
+
+### Geaendert
+- **Profil-Sammlung:** `extrude_sketch` sammelt nun standardmäßig alle Profile einer Skizze (statt nur das erste).
+
 ## [9.0.3] - 2026-04-25
 ### Hinzugefügt
 - **KI-Testartefakte:** Ausfuehrlicher KI-Testplan, kompakter Smoke-Test und maschinenlesbare YAML-Smoketest-Datei hinzugefuegt.

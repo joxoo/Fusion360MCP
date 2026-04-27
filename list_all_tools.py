@@ -1,32 +1,26 @@
-import json
-import requests
-import sys
+#!/usr/bin/env python3
+import argparse
+import asyncio
 
-# FusionMCP Server URL
-url = "http://localhost:8081/mcp/messages"
+from mcp import ClientSession
+from mcp.client.sse import sse_client
 
-# MCP listTools request
-payload = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "listTools",
-    "params": {}
-}
 
-try:
-    response = requests.post(url, json=payload)
-    if response.status_code == 200:
-        data = response.json()
-        if "result" in data:
-            tools = data["result"].get("tools", [])
-            print(f"Found {len(tools)} tools on FusionMCP server:\n")
-            for tool in sorted(tools, key=lambda x: x['name']):
-                print(f"- {tool['name']}: {tool.get('description', 'No description')}")
-        else:
-            print("Error: No result in response.")
-            print(json.dumps(data, indent=2))
-    else:
-        print(f"Error: Server returned status code {response.status_code}")
-        print(response.text)
-except Exception as e:
-    print(f"Connection Error: {e}")
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="List all tools from a running FusionMCP server.")
+    parser.add_argument("--url", default="http://127.0.0.1:8081/mcp/sse", help="FusionMCP SSE endpoint URL")
+    args = parser.parse_args()
+
+    async with sse_client(args.url) as streams:
+        read_stream, write_stream = streams
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+
+    print("Registered FusionMCP tools:")
+    for tool in sorted(tools.tools, key=lambda item: item.name):
+        print(f"- {tool.name}: {tool.description}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -1,9 +1,23 @@
 def build_create_sketch_script() -> str:
     return """try:
-    plane = {"XY": root.xYConstructionPlane, "XZ": root.xZConstructionPlane, "YZ": root.yZConstructionPlane}.get(params['plane'], root.xYConstructionPlane)
-    s = root.sketches.add(plane)
-    s.name = params['name']
-    returnValue.append(s.name)
+    body_name = params.get('body')
+    face_idx = params.get('face_index')
+    
+    target_plane = None
+    if body_name is not None:
+        target_body = find_body_recursive(root, body_name)
+        if target_body and face_idx is not None and 0 <= face_idx < target_body.faces.count:
+            target_plane = target_body.faces.item(face_idx)
+        else:
+            returnValue.append("ERR_BODY_OR_FACE_NOT_FOUND")
+            target_plane = None
+    else:
+        target_plane = {"XY": root.xYConstructionPlane, "XZ": root.xZConstructionPlane, "YZ": root.yZConstructionPlane}.get(params['plane'], root.xYConstructionPlane)
+    
+    if target_plane:
+        s = root.sketches.add(target_plane)
+        s.name = params['name']
+        returnValue.append(s.name)
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 

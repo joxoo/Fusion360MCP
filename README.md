@@ -9,6 +9,8 @@ FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It e
 - **Comprehensive Toolset**:
   - **Design**: General design and project management.
   - **Geometry**: Creation of primitive shapes (box, bolt) and sketches.
+    - `create_sketch`: Supports creating sketches on planes (XY, XZ, YZ) or directly on body faces (via `body_name` and `face_index`).
+    - `extrude_sketch`: Supports extruding all sketch profiles, including **SketchText**. Includes support for operations (`Join`, `Cut`, `NewBody`, `NewComponent`), start `offset`, and targeted body selection.
   - **Mechanical**: Specialized tools for holes, grooves, and mechanical features.
   - **Export**: Automated STL and F3D export capabilities.
   - **Analysis**: Real-time physical data and body analysis.

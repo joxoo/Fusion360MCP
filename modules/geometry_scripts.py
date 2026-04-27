@@ -766,14 +766,68 @@ except Exception as e:
 def build_extrude_sketch_script() -> str:
     return """try:
     s = next((sk for sk in active_comp.sketches if sk.name == params['sketch']), None)
-    if s and s.profiles.count > 0:
-        prof = s.profiles.item(0)
-        extrudes = active_comp.features.extrudeFeatures
-        ext_in = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(params['dist']))
-        ext = extrudes.add(ext_in)
-        returnValue.append(ext.bodies.item(0).name)
-    else: returnValue.append("ERR_SKETCH")
+    if not s:
+        returnValue.append("ERR_SKETCH")
+    else:
+        # Determine which profiles to extrude
+        idx = params.get('profile_index')
+        profs = adsk.core.ObjectCollection.create()
+        
+        if idx is not None and 0 <= idx < s.profiles.count:
+            profs.add(s.profiles.item(idx))
+        else:
+            # Add all standard profiles
+            for p in s.profiles:
+                profs.add(p)
+            # Add all sketch texts (they don't count as standard profiles but can be extruded)
+            for t in s.sketchTexts:
+                profs.add(t)
+        
+        if profs.count > 0:
+            # Determine operation
+            op_str = params.get('op', 'NewBody')
+            ops = {
+                'Join': adsk.fusion.FeatureOperations.JoinFeatureOperation,
+                'Cut': adsk.fusion.FeatureOperations.CutFeatureOperation,
+                'Intersect': adsk.fusion.FeatureOperations.IntersectFeatureOperation,
+                'NewBody': adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
+                'NewComponent': adsk.fusion.FeatureOperations.NewComponentFeatureOperation
+            }
+            op = ops.get(op_str, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+            
+            extrudes = active_comp.features.extrudeFeatures
+            ext_in = extrudes.createInput(profs, op)
+            
+            # Support for start offset
+            offset_val = params.get('offset', 0)
+            if offset_val != 0:
+                offset = adsk.fusion.OffsetStartDefinition.create(adsk.core.ValueInput.createByReal(offset_val))
+                ext_in.startExtent = offset
+                
+            ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(params['dist']))
+            
+            # Targeted body selection for Cut/Join
+            target_body_name = params.get('target_body')
+            if target_body_name:
+                target_body = find_body_recursive(root, target_body_name)
+                if target_body:
+                    ext_in.participantBodies = [target_body]
+            elif op in [adsk.fusion.FeatureOperations.CutFeatureOperation, adsk.fusion.FeatureOperations.JoinFeatureOperation]:
+                # Fallback: Include all bodies in the active component to ensure the operation has targets
+                all_bodies = []
+                for b in active_comp.bRepBodies:
+                    all_bodies.append(b)
+                if all_bodies:
+                    ext_in.participantBodies = all_bodies
+            
+            ext = extrudes.add(ext_in)
+            
+            if ext.bodies.count > 0:
+                returnValue.append(ext.bodies.item(0).name)
+            else:
+                returnValue.append("OK")
+        else:
+            returnValue.append("ERR_NO_PROFILE")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 

@@ -18,7 +18,7 @@
       "create_boundary_fill": { "description": "Erstellt einen Festkörper aus umschlossenen Zellen." },
       "create_hole_advanced": { "description": "Erstellt professionelle Bohrungen (Senkungen, Gewinde)." },
       "create_hole": { "description": "Erstellt eine einfache Bohrung." },
-      "extrude_sketch": { "description": "Extrudiert das erste Profil einer Skizze." },
+      "extrude_sketch": { "description": "Extrudiert Profile einer Skizze (alle oder Einzelauswahl, mit Operationen wie Join/Cut)." },
       "create_circular_pattern": { "description": "Erstellt ein Kreismuster eines Körpers." },
       "create_rectangular_pattern": { "description": "Erstellt ein Rechteckmuster von Körpern." },
       "create_pattern_on_path": { "description": "Erstellt ein Muster entlang eines Pfads." },
@@ -163,7 +163,7 @@
       "create_boundary_fill": { "description": "Creates a solid from enclosed cells." },
       "create_hole_advanced": { "description": "Creates professional holes (Counterbore, Tapped)." },
       "create_hole": { "description": "Creates a simple hole." },
-      "extrude_sketch": { "description": "Extrudes the first profile of a sketch." },
+      "extrude_sketch": { "description": "Extrudes profiles of a sketch (all or single selection, with operations like Join/Cut)." },
       "create_circular_pattern": { "description": "Creates a circular pattern of a body." },
       "create_rectangular_pattern": { "description": "Creates a rectangular pattern of bodies." },
       "create_pattern_on_path": { "description": "Creates a pattern along a sketch path." },
@@ -238,7 +238,7 @@
       "draw_line": { "description": "Draws a line." },
       "draw_circle": { "description": "Draws a circle." },
       "draw_rectangle": { "description": "Draws a rectangle." },
-      "create_sketch": { "description": "Creates a new sketch." },
+      "create_sketch": { "description": "Creates a new sketch on a specific plane or a body face." },
       "restart_mcp": { "description": "Manually restarts the MCP server subprocess." }
     },
     "messages": {
@@ -249,6 +249,7 @@
       "box_created": "Box '{name}' created.",
       "hole_created": "Hole created.",
       "extrusion_created": "Extrusion of '{name}' created.",
+      "new_body_created": "New body created.",
       "pattern_created": "Pattern created successfully.",
       "chamfer_created": "Chamfer created.",
       "shell_created": "Shell created.",
@@ -288,5 +289,10 @@
       "designation_not_found": "Designation not found.",
       "parameter_error": "Parameter error: {val}"
     }
+  }
+}
+  }
+}
+
   }
 }
