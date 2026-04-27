@@ -7,8 +7,47 @@ from modules.analysis_scripts import (
     build_create_draft_analysis_script,
     build_get_volumetric_properties_script,
     build_get_bounding_box_script,
+    build_validate_model_script,
+    build_get_scene_map_script,
 )
 import json
+
+def get_scene_map_logic(lang: str = "en"):
+    """Returns a spatial map of all bodies (Centroid + Bounding Box)."""
+    try:
+        res = execute_fusion_script(build_get_scene_map_script())
+        val = res.get("data", ["[]"])[0]
+        if val.startswith("ERR_"): return val
+        return val # JSON string is enough for the agent
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def validate_model_logic(lang: str = "en"):
+    """Performs a comprehensive construction check (Manifold, Interference, Body Count)."""
+    try:
+        res = execute_fusion_script(build_validate_model_script())
+        val = res.get("data", ["{}"])[0]
+        if val.startswith("ERR_"): return val
+        
+        data = json.loads(val)
+        report = []
+        report.append(f"Model Validation Report:")
+        report.append(f"- Body Count: {data['body_count']}")
+        report.append(f"- Single Solid: {'Yes' if data['is_single_solid'] else 'No (Warning: Multiple bodies detected)'}")
+        report.append(f"- Interferences: {data['interferences']}")
+        
+        if data['manifold_issues']:
+            report.append(f"- Manifold Issues: {', '.join(data['manifold_issues'])}")
+        else:
+            report.append("- Manifold Status: All bodies are closed solids.")
+            
+        if data['is_single_solid'] and data['interferences'] == 0 and not data['manifold_issues']:
+            report.append("\n✅ Ready for Print: The model is a perfect solid.")
+        else:
+            report.append("\n⚠️ Action Required: Model has integrity issues that might affect 3D printing.")
+            
+        return "\n".join(report)
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+    except Exception as e: return f"Error parsing report: {str(e)}"
 
 def get_volumetric_properties_logic(body: str, lang: str = "en"):
     """Returns detailed mass, volume, and moments of inertia."""
@@ -75,3 +114,5 @@ def register_analysis_tools(mcp):
     register_tool(mcp, "create_draft_analysis", create_draft_analysis_logic)
     register_tool(mcp, "get_volumetric_properties", get_volumetric_properties_logic)
     register_tool(mcp, "get_bounding_box", get_bounding_box_logic)
+    register_tool(mcp, "validate_model", validate_model_logic)
+    register_tool(mcp, "get_scene_map", get_scene_map_logic)

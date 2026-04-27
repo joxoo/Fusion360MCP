@@ -257,7 +257,38 @@ def build_combine_bodies_script() -> str:
         if op == 'cut': c_in.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
         elif op == 'intersect': c_in.operation = adsk.fusion.FeatureOperations.IntersectFeatureOperation
         else: c_in.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
-        combines.add(c_in)
+        
+        try:
+            combines.add(c_in)
+            returnValue.append("OK")
+        except:
+            # Falls Combine fehlschlägt (oft wegen Berührung ohne Überlappung), 
+            # geben wir einen Hinweis zurück, damit die KI neu positionieren kann.
+            returnValue.append("ERR_COMBINE_FAILED_GEOMETRY")
+    else: returnValue.append("ERR_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_move_body_absolute_script() -> str:
+    return """try:
+    target = find_body_recursive(root, params['body'])
+    if target:
+        ents = adsk.core.ObjectCollection.create(); ents.add(target)
+        # Aktueller Schwerpunkt
+        current_center = target.physicalProperties.centerOfMass
+        
+        # Differenz berechnen
+        dx = params['x'] - current_center.x
+        dy = params['y'] - current_center.y
+        dz = params['z'] - current_center.z
+        
+        moves = active_comp.features.moveFeatures
+        transform = adsk.core.Matrix3D.create()
+        transform.translation = adsk.core.Vector3D.create(dx, dy, dz)
+        
+        m_in = moves.createInput(ents, transform)
+        moves.add(m_in)
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_FOUND")
 except Exception as e:

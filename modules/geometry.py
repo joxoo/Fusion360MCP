@@ -24,6 +24,7 @@ from modules.geometry_scripts import (
     build_split_body_script,
     build_scale_body_script,
     build_move_body_script,
+    build_move_body_absolute_script,
     build_delete_face_script,
     build_offset_face_script,
     build_move_face_script,
@@ -116,6 +117,8 @@ def combine_bodies_logic(target: str, tool_bodies: list, operation: str = "Join"
         }, use_common=["find_body"])
         val = res.get("data", [""])[0]
         if val == "ERR_NOT_FOUND": return format_response(lang, "body_not_found")
+        if val == "ERR_COMBINE_FAILED_GEOMETRY":
+            return "Error: Fusion failed to combine these bodies. They might be touching but not overlapping enough. Use 'get_scene_map' to check positions and 'move_body_absolute' to ensure a 0.1mm overlap."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return "Bodies successfully combined."
     except FusionBridgeError as e: return f"Error: {str(e)}"
@@ -149,6 +152,18 @@ def move_body_logic(body: str, x: float, y: float, z: float, angle: float = 0, l
         val = res.get("data", [""])[0]
         if val == "ERR_NOT_FOUND": return format_response(lang, "body_not_found")
         return f"Body '{body}' moved."
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def move_body_absolute_logic(body: str, x: float, y: float, z: float, lang: str = "en"):
+    """Moves a body to an absolute center-of-mass position."""
+    try:
+        res = execute_fusion_script(build_move_body_absolute_script(), {
+            "body": body, "x": x, "y": y, "z": z
+        }, use_common=["find_body"])
+        val = res.get("data", [""])[0]
+        if val == "ERR_NOT_FOUND": return format_response(lang, "body_not_found")
+        if val == "OK": return f"Body '{body}' moved to absolute position ({x}, {y}, {z})."
+        return val
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def create_pattern_on_path_logic(body: str, path_sketch: str, count: int, dist: float, symmetric: bool = False, lang: str = "en"):
@@ -355,6 +370,7 @@ def register_geometry_tools(mcp):
     register_tool(mcp, "split_body", split_body_logic)
     register_tool(mcp, "scale_body", scale_body_logic)
     register_tool(mcp, "move_body", move_body_logic)
+    register_tool(mcp, "move_body_absolute", move_body_absolute_logic)
     register_tool(mcp, "create_plastic_rib", create_plastic_rib_logic)
     register_tool(mcp, "create_plastic_web", create_plastic_web_logic)
     register_tool(mcp, "create_plastic_boss", create_plastic_boss_logic)

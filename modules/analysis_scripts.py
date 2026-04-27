@@ -120,3 +120,61 @@ try:
     returnValue.append(json.dumps(bodies_info))
 except Exception as e:
     returnValue.append(f"Error: {str(e)}")"""
+
+
+def build_get_scene_map_script() -> str:
+    return """import json
+try:
+    scene_map = []
+    for b in root.bRepBodies:
+        bbox = b.boundingBox
+        center = b.physicalProperties.centerOfMass
+        scene_map.append({
+            "name": b.name,
+            "center": {"x": center.x, "y": center.y, "z": center.z},
+            "bbox": {
+                "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
+                "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
+                "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
+            },
+            "is_visible": b.isVisible
+        })
+    returnValue.append(json.dumps(scene_map))
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_validate_model_script() -> str:
+    return """import json
+try:
+    results = {
+        "body_count": root.bRepBodies.count,
+        "is_single_solid": root.bRepBodies.count == 1,
+        "bodies": [],
+        "interferences": 0,
+        "manifold_issues": []
+    }
+    
+    # 1. Analyze Each Body
+    all_bodies = adsk.core.ObjectCollection.create()
+    for b in root.bRepBodies:
+        all_bodies.add(b)
+        is_solid = b.isSolid
+        results["bodies"].append({
+            "name": b.name,
+            "is_solid": is_solid,
+            "volume": b.volume
+        })
+        if not is_solid:
+            results["manifold_issues"].append(f"Body '{b.name}' is not a closed solid (surface only).")
+
+    # 2. Check Interferences
+    if root.bRepBodies.count > 1:
+        design = adsk.fusion.Design.cast(app.activeProduct)
+        int_input = design.createInterferenceInput(all_bodies)
+        int_results = design.analyzeInterference(int_input)
+        results["interferences"] = int_results.count
+
+    returnValue.append(json.dumps(results))
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""

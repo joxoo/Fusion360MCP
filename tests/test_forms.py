@@ -3,6 +3,9 @@ from unittest.mock import MagicMock, patch
 from modules.forms import (
     create_form_box_logic,
     create_form_sphere_logic,
+    create_form_cylinder_logic,
+    create_form_plane_logic,
+    create_form_torus_logic,
     create_form_extrude_logic,
     create_form_revolve_logic,
     create_form_sweep_logic,
@@ -60,6 +63,18 @@ class TestForms(unittest.TestCase):
         self.assertEqual(res, "Edge inserted into 'Form1'.")
 
     @patch('modules.forms.execute_fusion_script')
+    def test_create_form_sphere_params(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["FormSphere1"]}
+        res = create_form_sphere_logic(10, 0, 0, 0, 8, 8, "en")
+        self.assertEqual(res, "Form sphere 'FormSphere1' created.")
+
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_sphere_unsupported(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
+        res = create_form_sphere_logic(10, 0, 0, 0, 8, 8, "en")
+        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
+
+    @patch('modules.forms.execute_fusion_script')
     def test_create_form_box_params(self, mock_exec):
         mock_exec.return_value = {"status": "success", "data": ["FormBox1"]}
         res = create_form_box_logic(10, 10, 10, 0, 0, 0, 2, 2, 2, "en")
@@ -69,6 +84,24 @@ class TestForms(unittest.TestCase):
     def test_create_form_box_unsupported(self, mock_exec):
         mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
         res = create_form_box_logic(10, 10, 10, 0, 0, 0, 2, 2, 2, "en")
+        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
+
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_cylinder_unsupported(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
+        res = create_form_cylinder_logic(5, 10, 0, 0, 0, 4, 8, "en")
+        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
+
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_plane_unsupported(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
+        res = create_form_plane_logic(10, 10, 0, 0, 0, 2, 2, "en")
+        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
+
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_torus_unsupported(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
+        res = create_form_torus_logic(10, 2, 0, 0, 0, 8, 8, "en")
         self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@ from modules.geometry import (
     split_body_logic,
     scale_body_logic,
     move_body_logic,
+    move_body_absolute_logic,
     create_plastic_rib_logic,
     create_plastic_web_logic,
     create_plastic_boss_logic,
@@ -120,6 +121,26 @@ class TestGeometry(unittest.TestCase):
 
         res = move_body_logic("Body1", 5, 0, 0, 45, "en")
         self.assertEqual(res, "Body 'Body1' moved.")
+
+    @patch('core.bridge.requests.post')
+    def test_move_body_absolute_params(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["OK"]}
+        mock_post.return_value = mock_response
+
+        res = move_body_absolute_logic("Body1", 10, 10, 10, "en")
+        self.assertEqual(res, "Body 'Body1' moved to absolute position (10, 10, 10).")
+
+    @patch('core.bridge.requests.post')
+    def test_combine_bodies_geometry_error(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["ERR_COMBINE_FAILED_GEOMETRY"]}
+        mock_post.return_value = mock_response
+
+        res = combine_bodies_logic("Target", ["Tool1"], "Join", "en")
+        self.assertIn("They might be touching but not overlapping enough", res)
 
     @patch('core.bridge.requests.post')
     def test_create_plastic_boss_params(self, mock_post):
