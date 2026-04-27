@@ -6,6 +6,7 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 ### Hinzugefügt
 - **KI-Testartefakte:** Ausfuehrlicher KI-Testplan, kompakter Smoke-Test und maschinenlesbare YAML-Smoketest-Datei hinzugefuegt.
 - **Alias-Testabdeckung:** Unit-Tests fuer lokalisierte MCP-Toolsignaturen und Parametermappings erweitert.
+- **MCP-Kompatibilitäts-Wrapper:** Bekannte Tool-/Parameter-Aliase und harmlose Client-Metadaten wie `wait_for_previous` werden bei der Tool-Registrierung wieder toleriert.
 
 ### Geaendert
 - **Dynamische Tool-Registrierung:** Sprach- und Parameter-Aliase werden zentral aus `i18n.json` geladen.

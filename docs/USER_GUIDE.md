@@ -61,7 +61,15 @@ Technische Validierung des Modells.
 Der Server unterstützt komplexe, mehrzeilige Python-Skripte via `direct_api_access`. Sämtliche `print()`-Ausgaben innerhalb dieser Skripte werden automatisch abgefangen und als Teil der MCP-Antwort an den Nutzer zurückgegeben.
 
 ### 3.2 Kanonische Schnittstelle
-Alle Werkzeuge und Parameter sind nach internationalem Standard auf **Englisch** benannt (z.B. `create_sketch` statt `skizze_erstellen`). Dies garantiert die Kompatibilität mit allen modernen KI-Clients.
+Alle Werkzeuge und Parameter sind nach internationalem Standard auf **Englisch** benannt (z.B. `create_sketch` statt `skizze_erstellen`). Dies ist die bevorzugte und vollständig dokumentierte Schnittstelle für moderne KI-Clients.
+
+### 3.2.1 Kompatibilitäts-Aliase
+Für ältere Prompts und einfache Smoke-Tests akzeptiert der Server zusätzlich einige bekannte Tool- und Parameter-Aliase, z.B.:
+- `skizze_erstellen(..., ebene="XY")` -> `create_sketch(..., plane_name="XY")`
+- `polygon_zeichnen(..., skizzen_name=..., center_x=..., center_y=..., seiten=...)` -> `sketch_polygon(..., sketch_name=..., cx=..., cy=..., sides=...)`
+- `kreis_zeichnen(..., skizzen_name=..., center_x=..., center_y=...)` -> `draw_circle(..., sketch_name=..., x=..., y=...)`
+
+Zusätzliche Client-Metadaten wie `wait_for_previous` werden toleriert und serverseitig ignoriert, solange sie keine fachlichen Parameter sind.
 
 ### 3.3 Lokalisierte Rückmeldungen
 Obwohl die Befehle Englisch sind, antwortet der Server basierend auf der Nutzersprache (aktuell Deutsch und Englisch) mit lokalisierten Erfolgsmeldungen und Fehlermeldungen.
@@ -82,6 +90,6 @@ Nach Code-Änderungen oder bei Session-Problemen muss das Add-In in Fusion 360:
 ---
 
 ## 5. Troubleshooting
-*   **-32602 (Invalid Parameters):** Stelle sicher, dass du die englischen Parameternamen aus dem Schema verwendest.
+*   **-32602 (Invalid Parameters):** Verwende bevorzugt die englischen Parameternamen aus dem Schema. Wenn ein älterer Prompt Aliase nutzt, prüfe, ob der Alias vom Server unterstützt wird.
 *   **404 (Not Found):** Die Session-ID ist abgelaufen. Starte die Gemini-Session neu.
 *   **Timeout:** Fusion 360 blockiert den UI-Thread (z.B. durch ein offenes Dialogfenster). Schließe alle Dialoge in Fusion.

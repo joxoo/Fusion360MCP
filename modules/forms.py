@@ -158,6 +158,8 @@ def create_form_box_logic(l: float, w: float, h: float, x: float = 0, y: float =
             "l": l, "w": w, "h": h, "x": x, "y": y, "z": z, "l_faces": l_faces, "w_faces": w_faces, "h_faces": h_faces
         })
         val = res.get("data", [""])[0]
+        if val == "ERR_UNSUPPORTED":
+            return "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return f"Form box '{val}' created."
     except FusionBridgeError as e: return f"Error: {str(e)}"

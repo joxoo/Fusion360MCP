@@ -66,10 +66,18 @@ Dieser Testplan dient der vollständigen Verifizierung aller Fusion 360 MCP-Modu
 
 ---
 
-## 7. Assembly & Baugruppen
-- **Structure:** `create_component(name="Motor")` -> Unterstruktur erstellt.
-- **Joints:** `create_joint(comp1="Motor", comp2="Gehäuse", joint_type="Revolute")` -> Bewegliche Verbindung.
-- **Check:** `check_interference(body_names=["B1", "B2"])` -> Liefert Interferenz-Anzahl.
+## 7. Assembly & Baugruppen (Hierarchie & Kontext)
+- **Component Creation:** `create_component(name="Sub_Assembly")` -> Baugruppe erstellt UND automatisch aktiviert.
+- **Hierarchical Placement:** 
+  - `create_component(name="Baugruppe_A")`
+  - `create_cylinder(r=10, h=40, name="Körper_in_A")`
+  - **Check:** Körper liegt physisch in `Baugruppe_A` (nicht im Root).
+- **Nested Components:**
+  - `create_component(name="Parent")`
+  - `create_component(name="Child")`
+  - **Check:** `Child` ist eine Unter-Komponente von `Parent`.
+- **Joints:** `create_joint(comp1="Parent", comp2="Child", joint_type="Rigid")` -> Verbindung zwischen Ebenen.
+- **Hierarchy Split:** `split_body(body="Körper_in_A", tool="XY")` -> Nutzt Konstruktionsebene der aktiven Komponente.
 
 ---
 

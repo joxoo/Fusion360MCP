@@ -143,15 +143,23 @@ except Exception as e:
 def build_stitch_surfaces_script() -> str:
     return """try:
     surfaces = adsk.core.ObjectCollection.create()
+    first_name = None
     for name in params['body_names']:
         b = find_body_recursive(root, name)
-        if b: surfaces.add(b)
+        if b:
+            surfaces.add(b)
+            if first_name is None:
+                first_name = b.name
     
     if surfaces.count > 0:
         stitches = root.features.stitchFeatures
         s_in = stitches.createInput(surfaces, adsk.core.ValueInput.createByReal(params.get('tol', 0.1)), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         stitch_feat = stitches.add(s_in)
-        returnValue.append(stitch_feat.bodies.item(0).name)
+        if stitch_feat and stitch_feat.bodies and stitch_feat.bodies.count > 0:
+            returnValue.append(stitch_feat.bodies.item(0).name)
+        else:
+            # A stitch on a single open body or a no-op stitch can succeed without creating a new result body.
+            returnValue.append(first_name or "OK")
     else: returnValue.append("ERR_MIN_SURFACES")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""

@@ -53,5 +53,12 @@ class TestSurfaces(unittest.TestCase):
         res = stitch_surfaces_logic(["S1", "S2"], 0.1, "en")
         self.assertIn("Surfaces stitched successfully", res)
 
+class TestSurfaceScripts(unittest.TestCase):
+    def test_stitch_script_has_safe_fallback(self):
+        from modules.surfaces_scripts import build_stitch_surfaces_script
+        script = build_stitch_surfaces_script()
+        self.assertIn("first_name", script)
+        self.assertIn("stitch_feat.bodies.count > 0", script)
+
 if __name__ == '__main__':
     unittest.main()

@@ -3,6 +3,63 @@ import os
 import functools
 import inspect
 
+IGNORED_TOOL_KWARGS = {"wait_for_previous"}
+
+TOOL_ALIASES = {
+    "create_new_design": ["neue_konstruktion"],
+    "cleanup_design": ["design_bereinigen"],
+    "create_box": ["box_erstellen"],
+    "create_sketch": ["skizze_erstellen"],
+    "sketch_polygon": ["polygon_zeichnen", "draw_polygon"],
+    "draw_circle": ["kreis_zeichnen"],
+    "get_body_info": ["koerper_analysieren"],
+}
+
+PARAM_ALIASES = {
+    "create_sketch": {
+        "plane": "plane_name",
+        "ebene": "plane_name",
+    },
+    "sketch_polygon": {
+        "skizzen_name": "sketch_name",
+        "center_x": "cx",
+        "center_y": "cy",
+        "seiten": "sides",
+    },
+    "draw_circle": {
+        "skizzen_name": "sketch_name",
+        "center_x": "x",
+        "center_y": "y",
+    },
+}
+
+ALIAS_SIGNATURES = {
+    "skizze_erstellen": {
+        "ebene": "plane_name",
+        "name": "name",
+    },
+    "polygon_zeichnen": {
+        "skizzen_name": "sketch_name",
+        "center_x": "cx",
+        "center_y": "cy",
+        "radius": "radius",
+        "seiten": "sides",
+    },
+    "draw_polygon": {
+        "sketch_name": "sketch_name",
+        "center_x": "cx",
+        "center_y": "cy",
+        "radius": "radius",
+        "sides": "sides",
+    },
+    "kreis_zeichnen": {
+        "skizzen_name": "sketch_name",
+        "center_x": "x",
+        "center_y": "y",
+        "radius": "radius",
+    },
+}
+
 # Common Fusion 360 script fragments
 COMMON_FUSION_SCRIPTS = {
     "find_body": """
@@ -34,6 +91,23 @@ def find_sketch_recursive(component, target_name):
         if not target_name or names_match(s.name, target_name): return s
     for occ in component.occurrences:
         res = find_sketch_recursive(occ.component, target_name)
+        if res: return res
+    return None
+
+def find_tspline_body_recursive(component, target_name):
+    form_features = getattr(component.features, 'formFeatures', None)
+    if form_features:
+        for i in range(form_features.count):
+            form_feature = form_features.item(i)
+            ts_bodies = getattr(form_feature, 'tSplineBodies', None)
+            if not ts_bodies:
+                continue
+            for j in range(ts_bodies.count):
+                ts_body = ts_bodies.item(j)
+                if not target_name or names_match(ts_body.name, target_name):
+                    return ts_body
+    for occ in component.occurrences:
+        res = find_tspline_body_recursive(occ.component, target_name)
         if res: return res
     return None
 """,
@@ -71,7 +145,12 @@ def translate_body(body, x=0.0, y=0.0, z=0.0):
 """,
     "setup_standard": """import adsk.core, adsk.fusion, traceback, math
 d = adsk.fusion.Design.cast(app.activeProduct)
-root = d.rootComponent"""
+root = d.rootComponent
+active_comp = d.activeComponent or root
+
+def get_target_comp():
+    return d.activeComponent or root
+"""
 }
 
 _I18N_DATA = None
@@ -111,6 +190,57 @@ def register_tool(mcp, tool_key, func):
     en_config = i18n.get("en", {}).get("tools", {}).get(tool_key, {})
     desc = en_config.get("description", func.__doc__ or "")
     
-    # Register the original function directly. 
-    # This allows FastMCP to correctly inspect type hints and default values.
-    mcp.tool(name=tool_key, description=desc)(func)
+    sig = inspect.signature(func)
+    accepted_params = set(sig.parameters.keys())
+    alias_map = PARAM_ALIASES.get(tool_key, {})
+
+    @functools.wraps(func)
+    def wrapper(**kwargs):
+        normalized = {}
+        for key, value in kwargs.items():
+            if key in IGNORED_TOOL_KWARGS:
+                continue
+            canonical_key = alias_map.get(key, key)
+            if canonical_key in accepted_params:
+                normalized[canonical_key] = value
+
+        if "lang" in sig.parameters:
+            normalized.setdefault("lang", "en")
+
+        return func(**normalized)
+
+    public_params = [
+        param for name, param in sig.parameters.items()
+        if name != "lang"
+    ]
+    wrapper.__signature__ = sig.replace(parameters=public_params)
+    wrapper.__annotations__ = {
+        key: value for key, value in func.__annotations__.items()
+        if key != "lang"
+    }
+
+    mcp.tool(name=tool_key, description=desc)(wrapper)
+
+    for alias in TOOL_ALIASES.get(tool_key, []):
+        alias_wrapper = wrapper
+        alias_signature_map = ALIAS_SIGNATURES.get(alias)
+        if alias_signature_map:
+            alias_parameters = []
+            for alias_param_name, canonical_param_name in alias_signature_map.items():
+                canonical_param = sig.parameters[canonical_param_name]
+                alias_parameters.append(
+                    inspect.Parameter(
+                        alias_param_name,
+                        kind=canonical_param.kind,
+                        default=canonical_param.default,
+                        annotation=canonical_param.annotation,
+                    )
+                )
+            alias_wrapper = functools.wraps(func)(lambda **kwargs: wrapper(**kwargs))
+            alias_wrapper.__signature__ = sig.replace(parameters=alias_parameters)
+            alias_wrapper.__annotations__ = {
+                alias_name: sig.parameters[canonical_name].annotation
+                for alias_name, canonical_name in alias_signature_map.items()
+            }
+
+        mcp.tool(name=alias, description=desc)(alias_wrapper)

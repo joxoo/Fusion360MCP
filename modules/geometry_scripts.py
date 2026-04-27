@@ -33,10 +33,10 @@ except Exception as e:
 def build_mirror_body_script() -> str:
     return """try:
     target = find_body_recursive(root, params['body'])
-    plane = {"XY": root.xYConstructionPlane, "XZ": root.xZConstructionPlane, "YZ": root.yZConstructionPlane}.get(params['plane'], root.xYConstructionPlane)
+    plane = {"XY": active_comp.xYConstructionPlane, "XZ": active_comp.xZConstructionPlane, "YZ": active_comp.yZConstructionPlane}.get(params['plane'], active_comp.xYConstructionPlane)
     if target:
         ents = adsk.core.ObjectCollection.create(); ents.add(target)
-        mirrors = root.features.mirrorFeatures
+        mirrors = active_comp.features.mirrorFeatures
         m_in = mirrors.createInput(ents, plane)
         mirrors.add(m_in)
         returnValue.append("OK")
@@ -47,11 +47,11 @@ except Exception as e:
 
 def build_create_revolve_script() -> str:
     return """try:
-    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
-    axis_entity = {"X": root.xConstructionAxis, "Y": root.yConstructionAxis, "Z": root.zConstructionAxis}.get(params['axis'], root.zConstructionAxis)
+    s = next((sk for sk in active_comp.sketches if sk.name == params['sketch']), None)
+    axis_entity = {"X": active_comp.xConstructionAxis, "Y": active_comp.yConstructionAxis, "Z": active_comp.zConstructionAxis}.get(params['axis'], active_comp.zConstructionAxis)
     if s and s.profiles.count > 0:
         prof = s.profiles.item(0)
-        revolves = root.features.revolveFeatures
+        revolves = active_comp.features.revolveFeatures
         rev_in = revolves.createInput(prof, axis_entity, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         angle = adsk.core.ValueInput.createByString(f"{params['angle']} deg")
         rev_in.setAngleExtent(False, angle)
@@ -70,7 +70,7 @@ def build_create_boundary_fill_script() -> str:
         if t: tool_collection.add(t)
     
     if tool_collection.count > 0:
-        bfills = root.features.boundaryFillFeatures
+        bfills = active_comp.features.boundaryFillFeatures
         bf_in = bfills.createInput(tool_collection, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         # Select all cells by default to create the solid
         for cell in bf_in.bRepCells:
@@ -91,7 +91,7 @@ def build_create_hole_advanced_script() -> str:
     else:
         # Simple placement logic: find a face or use the provided Z
         face = next((f for f in target_body.faces if f.geometry.surfaceType == adsk.core.SurfaceTypes.PlaneSurfaceType), target_body.faces.item(0))
-        hole_feats = root.features.holeFeatures
+        hole_feats = active_comp.features.holeFeatures
         
         # Determine hole type and create input
         h_type = params.get('hole_type', 'Simple').lower()
@@ -139,15 +139,15 @@ except Exception as e:
 def build_create_pattern_on_path_script() -> str:
     return """try:
     target = find_body_recursive(root, params['body'])
-    path_sk = next((s for s in root.sketches if s.name == params['path_sketch']), None)
+    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
     
     if target and path_sk and path_sk.sketchCurves.count > 0:
         ents = adsk.core.ObjectCollection.create()
         ents.add(target)
         
         # Use first curve as path
-        path = root.features.createPath(path_sk.sketchCurves.item(0))
-        patterns = root.features.pathPatternFeatures
+        path = active_comp.features.createPath(path_sk.sketchCurves.item(0))
+        patterns = active_comp.features.pathPatternFeatures
         quantity = adsk.core.ValueInput.createByReal(params['count'])
         distance = adsk.core.ValueInput.createByReal(params['dist'])
         
@@ -165,17 +165,17 @@ def build_mirror_features_script() -> str:
     # This is more complex because we need the actual Feature objects, not bodies.
     # We attempt to find features by name in the timeline.
     target_feat = None
-    for f in root.features:
+    for f in active_comp.features:
         if f.name == params['feature_name']:
             target_feat = f
             break
             
-    plane = {"XY": root.xYConstructionPlane, "XZ": root.xZConstructionPlane, "YZ": root.yZConstructionPlane}.get(params['plane'], root.xYConstructionPlane)
+    plane = {"XY": active_comp.xYConstructionPlane, "XZ": active_comp.xZConstructionPlane, "YZ": active_comp.yZConstructionPlane}.get(params['plane'], active_comp.xYConstructionPlane)
     
     if target_feat:
         ents = adsk.core.ObjectCollection.create()
         ents.add(target_feat)
-        mirrors = root.features.mirrorFeatures
+        mirrors = active_comp.features.mirrorFeatures
         m_in = mirrors.createInput(ents, plane)
         mirrors.add(m_in)
         returnValue.append("OK")
@@ -270,7 +270,7 @@ def build_split_body_script() -> str:
     if not target:
         returnValue.append("ERR_BODY")
     else:
-        owner = target.parentComponent if target.parentComponent else root
+        owner = active_comp
         tool_name = str(params.get('tool', '')).strip().upper()
         tool = {
             "XY": owner.xYConstructionPlane,
@@ -300,7 +300,7 @@ def build_scale_body_script() -> str:
     target = find_body_recursive(root, params['body'])
     if target:
         ents = adsk.core.ObjectCollection.create(); ents.add(target)
-        scales = root.features.scaleFeatures
+        scales = active_comp.features.scaleFeatures
         origin = root.originConstructionPoint
         factor = adsk.core.ValueInput.createByReal(params['factor'])
         s_in = scales.createInput(ents, origin, factor)
@@ -316,7 +316,7 @@ def build_move_body_script() -> str:
     target = find_body_recursive(root, params['body'])
     if target:
         ents = adsk.core.ObjectCollection.create(); ents.add(target)
-        moves = root.features.moveFeatures
+        moves = active_comp.features.moveFeatures
         transform = adsk.core.Matrix3D.create()
         # Translation
         vector = adsk.core.Vector3D.create(params['x'], params['y'], params['z'])
@@ -324,7 +324,7 @@ def build_move_body_script() -> str:
         # Rotation (simplified: around Z axis if angle provided)
         if params.get('angle', 0) != 0:
             rot_mat = adsk.core.Matrix3D.create()
-            rot_mat.setToRotation(params['angle'] * (3.14159/180.0), root.zConstructionAxis, root.originConstructionPoint)
+            rot_mat.setToRotation(params['angle'] * (3.14159/180.0), active_comp.zConstructionAxis, root.originConstructionPoint)
             transform.transformBy(rot_mat)
             
         m_in = moves.createInput(ents, transform)
@@ -337,10 +337,10 @@ except Exception as e:
 
 def build_create_plastic_rib_script() -> str:
     return """try:
-    path_sk = next((s for s in root.sketches if s.name == params['path_sketch']), None)
+    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
     if path_sk and path_sk.sketchCurves.count > 0:
         line = path_sk.sketchCurves.item(0)
-        ribs = root.features.ribFeatures
+        ribs = active_comp.features.ribFeatures
         r_in = ribs.createInput(line, True)
         r_in.thickness = adsk.core.ValueInput.createByReal(params['thick'])
         r_in.extentType = adsk.fusion.RibExtentTypes.ToNextRibExtentType
@@ -353,11 +353,11 @@ except Exception as e:
 
 def build_create_plastic_web_script() -> str:
     return """try:
-    path_sk = next((s for s in root.sketches if s.name == params['path_sketch']), None)
+    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
     if path_sk and path_sk.sketchCurves.count > 0:
         curves = adsk.core.ObjectCollection.create()
         for c in path_sk.sketchCurves: curves.add(c)
-        webs = root.features.webFeatures
+        webs = active_comp.features.webFeatures
         w_in = webs.createInput(curves, True)
         w_in.thickness = adsk.core.ValueInput.createByReal(params['thick'])
         w_in.depthOptions.setDepthToNext()
@@ -437,14 +437,17 @@ except Exception as e:
 
 def build_create_cylinder_script() -> str:
     return """try:
-    plane = {"XY": root.xYConstructionPlane, "XZ": root.xZConstructionPlane, "YZ": root.yZConstructionPlane}.get(params['plane'], root.xYConstructionPlane)
+    plane = {"XY": active_comp.xYConstructionPlane, "XZ": active_comp.xZConstructionPlane, "YZ": active_comp.yZConstructionPlane}.get(params['plane'], active_comp.xYConstructionPlane)
     center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
-    sk = root.sketches.add(plane)
+    sk = active_comp.sketches.add(plane)
     sk.sketchCurves.sketchCircles.addByCenterRadius(center, params['r'])
     prof = sk.profiles.item(0)
-    ext = root.features.extrudeFeatures.addSimple(prof, adsk.core.ValueInput.createByReal(params['h']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    ext = active_comp.features.extrudeFeatures.addSimple(prof, adsk.core.ValueInput.createByReal(params['h']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
     body = ext.bodies.item(0)
     body.name = params['name']
+    if body.parentComponent != active_comp:
+        try: body.moveToComponent(d.activeOccurrence)
+        except: pass
     returnValue.append(body.name)
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
@@ -454,7 +457,7 @@ def build_create_sphere_script() -> str:
     return """try:
     center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
     radius = params['r']
-    sk = root.sketches.add(root.xYConstructionPlane)
+    sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
     
     # Draw a semi-circle arc on the XY plane (vertical-ish)
     startPoint = adsk.core.Point3D.create(center.x, center.y + radius, center.z)
@@ -466,7 +469,7 @@ def build_create_sphere_script() -> str:
     
     if sk.profiles.count > 0:
         prof = sk.profiles.item(0)
-        revolves = root.features.revolveFeatures
+        revolves = active_comp.features.revolveFeatures
         rev_in = revolves.createInput(prof, axisLine, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         rev_in.isSolid = False
         angle = adsk.core.ValueInput.createByReal(2 * math.pi)
@@ -488,7 +491,7 @@ def build_create_torus_script() -> str:
     minor_r = params['minor_r']
     
     # Create sketch on XY plane
-    sk = root.sketches.add(root.xYConstructionPlane)
+    sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
     
     # Draw circle for cross section, offset by major radius
     circle_center = adsk.core.Point3D.create(center.x + major_r, center.y, center.z)
@@ -502,7 +505,7 @@ def build_create_torus_script() -> str:
     
     if sk.profiles.count > 0:
         prof = sk.profiles.item(0)
-        revolves = root.features.revolveFeatures
+        revolves = active_comp.features.revolveFeatures
         rev_in = revolves.createInput(prof, axisLine, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         rev_in.isSolid = False
         angle = adsk.core.ValueInput.createByReal(2 * math.pi)
@@ -519,17 +522,35 @@ except Exception as e:
 
 def build_create_coil_script() -> str:
     return """try:
-    returnValue.append("ERR_UNSUPPORTED: Coil creation via direct primitive API is currently not supported. Use sketches and revolve/sweep.")
+    before_tokens = set()
+    for i in range(active_comp.bRepBodies.count):
+        before_tokens.add(active_comp.bRepBodies.item(i).entityToken)
+
+    app.executeTextCommand(u'Commands.Start PrimitiveCoil')
+    app.executeTextCommand(u'NuCommands.CommitCmd')
+
+    created = None
+    for i in range(active_comp.bRepBodies.count):
+        body = active_comp.bRepBodies.item(i)
+        if body.entityToken not in before_tokens:
+            created = body
+            break
+
+    if created:
+        created.name = params['name']
+        returnValue.append(created.name)
+    else:
+        returnValue.append("ERR_UNSUPPORTED: Coil creation is not available in the current Fusion command/runtime context.")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
 def build_create_pipe_script() -> str:
     return """try:
-    path_sk = next((s for s in root.sketches if s.name == params['path_sketch']), None)
+    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
     if path_sk and path_sk.sketchCurves.count > 0:
-        path = root.features.createPath(path_sk.sketchCurves.item(0))
-        pipes = root.features.pipeFeatures
+        path = active_comp.features.createPath(path_sk.sketchCurves.item(0))
+        pipes = active_comp.features.pipeFeatures
         p_in = pipes.createInput(path, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         p_in.sectionShape = adsk.fusion.PipeSectionShapeTypes.CircularPipeSectionShapeType
         p_in.distance = adsk.core.ValueInput.createByReal(1.0)
@@ -546,7 +567,7 @@ except Exception as e:
 def build_create_box_script() -> str:
     return """try:
     pt = adsk.core.Point3D.create(0, 0, 0)
-    s = root.sketches.add(root.xYConstructionPlane)
+    s = active_comp.sketches.add(active_comp.xYConstructionPlane)
     s.sketchCurves.sketchLines.addTwoPointRectangle(
         pt, adsk.core.Point3D.create(pt.x + params['l'], pt.y + params['w'], 0)
     )
@@ -554,7 +575,7 @@ def build_create_box_script() -> str:
         returnValue.append("ERR_NO_PROFILE")
     else:
         prof = s.profiles.item(0)
-        box = root.features.extrudeFeatures.addSimple(
+        box = active_comp.features.extrudeFeatures.addSimple(
             prof,
             adsk.core.ValueInput.createByReal(params['h']),
             adsk.fusion.FeatureOperations.NewBodyFeatureOperation
@@ -573,8 +594,8 @@ def build_create_circular_pattern_script() -> str:
     if target:
         ents = adsk.core.ObjectCollection.create()
         ents.add(target)
-        axis = {"X": root.xConstructionAxis, "Y": root.yConstructionAxis, "Z": root.zConstructionAxis}.get(params['axis'], root.zConstructionAxis)
-        patterns = root.features.circularPatternFeatures
+        axis = {"X": active_comp.xConstructionAxis, "Y": active_comp.yConstructionAxis, "Z": active_comp.zConstructionAxis}.get(params['axis'], active_comp.zConstructionAxis)
+        patterns = active_comp.features.circularPatternFeatures
         p_in = patterns.createInput(ents, axis)
         p_in.quantity = adsk.core.ValueInput.createByReal(params['count'])
         p_in.totalAngle = adsk.core.ValueInput.createByString("360 deg")
@@ -591,10 +612,10 @@ def build_create_rectangular_pattern_script() -> str:
     if target:
         ents = adsk.core.ObjectCollection.create()
         ents.add(target)
-        patterns = root.features.rectangularPatternFeatures
-        p_in = patterns.createInput(ents, root.xConstructionAxis, adsk.core.ValueInput.createByReal(params['cx']), adsk.core.ValueInput.createByReal(params['dx']), adsk.fusion.RectangularPatternSpacingTypes.SpacingRectangularPatternSpacingType)
+        patterns = active_comp.features.rectangularPatternFeatures
+        p_in = patterns.createInput(ents, active_comp.xConstructionAxis, adsk.core.ValueInput.createByReal(params['cx']), adsk.core.ValueInput.createByReal(params['dx']), adsk.fusion.RectangularPatternSpacingTypes.SpacingRectangularPatternSpacingType)
         if params['cy'] > 1:
-            p_in.directionTwo = root.yConstructionAxis
+            p_in.directionTwo = active_comp.yConstructionAxis
             p_in.quantityTwo = adsk.core.ValueInput.createByReal(params['cy'])
             p_in.distanceTwo = adsk.core.ValueInput.createByReal(params['dy'])
         patterns.add(p_in)
@@ -622,10 +643,10 @@ except Exception as e:
 
 def build_extrude_sketch_script() -> str:
     return """try:
-    s = next((sk for sk in root.sketches if sk.name == params['sketch']), None)
+    s = next((sk for sk in active_comp.sketches if sk.name == params['sketch']), None)
     if s and s.profiles.count > 0:
         prof = s.profiles.item(0)
-        extrudes = root.features.extrudeFeatures
+        extrudes = active_comp.features.extrudeFeatures
         ext_in = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(params['dist']))
         ext = extrudes.add(ext_in)
@@ -637,14 +658,14 @@ except Exception as e:
 
 def build_create_hole_script() -> str:
     return """try:
-    plane = get_offset_plane(root.xYConstructionPlane, params['z'])
-    sketch = root.sketches.add(plane)
+    plane = get_offset_plane(active_comp.xYConstructionPlane, params['z'])
+    sketch = active_comp.sketches.add(plane)
     center = adsk.core.Point3D.create(params['x'], params['y'], 0)
     sketch.sketchCurves.sketchCircles.addByCenterRadius(center, params['d'] / 20.0)
     if sketch.profiles.count < 1:
         returnValue.append("ERR_NO_PROFILE")
     else:
-        extrudes = root.features.extrudeFeatures
+        extrudes = active_comp.features.extrudeFeatures
         ext_in = extrudes.createInput(sketch.profiles.item(0), adsk.fusion.FeatureOperations.CutFeatureOperation)
         ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(1000.0))
         extrudes.add(ext_in)

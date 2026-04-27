@@ -151,5 +151,39 @@ class TestGeometry(unittest.TestCase):
         res = create_box_logic(10, 10, 10, "MyBox", 0, 0, 0, "NewBody", 0, "en")
         self.assertEqual(res, "Box 'MyBox' created.")
 
+    @patch('core.bridge.requests.post')
+    def test_create_coil_command_unavailable(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["ERR_API:3 : Command unavailable in this context."]}
+        mock_post.return_value = mock_response
+
+        res = create_coil_logic(10, 30, 5, 2, "Spring", 0, 0, 0, "en")
+        self.assertEqual(res, "Error: Coil creation is not available in the current Fusion command/runtime context.")
+
+class TestGeometryScripts(unittest.TestCase):
+    def test_coil_script_uses_command_fallback(self):
+        from modules.geometry_scripts import build_create_coil_script
+        script = build_create_coil_script()
+        self.assertIn("Commands.Start PrimitiveCoil", script)
+        self.assertIn("ERR_UNSUPPORTED", script)
+
+    def test_cylinder_script_hierarchy(self):
+        from modules.geometry_scripts import build_create_cylinder_script
+        script = build_create_cylinder_script()
+        self.assertIn("active_comp.features", script)
+        self.assertIn("body.moveToComponent", script)
+
+    def test_revolve_script_hierarchy(self):
+        from modules.geometry_scripts import build_create_revolve_script
+        script = build_create_revolve_script()
+        self.assertIn("active_comp.sketches", script)
+        self.assertIn("active_comp.features", script)
+
+    def test_split_body_script_hierarchy(self):
+        from modules.geometry_scripts import build_split_body_script
+        script = build_split_body_script()
+        self.assertIn("owner = active_comp", script)
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,19 +1,14 @@
 def build_create_form_mirror_internal_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
-    # In API, TSplineBody is not part of bRepBodies.
-    # We search in tSplineBodies collection if not found in root occurrences.
-    if not target:
-        for ts in root.tSplineBodies:
-            if ts.name == params['body']:
-                target = ts
-                break
-                
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         # Requires two adjacent faces to define the plane. Defaulting to face 0 and 1.
         f1 = target.faces.item(0)
         f2 = target.faces.item(1)
         target.symmetries.addInternalMirrorSymmetry(f1, f2)
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -22,15 +17,12 @@ except Exception as e:
 
 def build_clear_form_symmetry_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
-    if not target:
-        for ts in root.tSplineBodies:
-            if ts.name == params['body']:
-                target = ts
-                break
-                
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         target.symmetries.clearSymmetry()
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -39,13 +31,16 @@ except Exception as e:
 
 def build_set_form_display_mode_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         ui.activeSelections.clear()
         ui.activeSelections.add(target)
         mode = params.get('mode', 'Smooth').lower()
         if mode == 'box': app.executeTextCommand(u'Commands.Start TSplineBoxDisplayCommand')
         else: app.executeTextCommand(u'Commands.Start TSplineSmoothDisplayCommand')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -54,14 +49,17 @@ except Exception as e:
 
 def build_bridge_form_entities_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         # Requires two edge sets. Defaulting to first few edges.
         ui.activeSelections.clear()
         ui.activeSelections.add(target.edges.item(0))
         ui.activeSelections.add(target.edges.item(target.edges.count // 2))
         app.executeTextCommand(u'Commands.Start TSplineBridgeCommand')
         app.executeTextCommand(u'NuCommands.CommitCmd')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -70,13 +68,16 @@ except Exception as e:
 
 def build_fill_form_hole_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         # Select an edge on the hole boundary
         ui.activeSelections.clear()
         ui.activeSelections.add(target.edges.item(0))
         app.executeTextCommand(u'Commands.Start TSplineFillHoleCommand')
         app.executeTextCommand(u'NuCommands.CommitCmd')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -85,13 +86,16 @@ except Exception as e:
 
 def build_convert_form_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         ui.activeSelections.clear()
         ui.activeSelections.add(target)
         # Convert T-Spline to B-Rep
         app.executeTextCommand(u'Commands.Start TSplineConvertCommand')
         app.executeTextCommand(u'NuCommands.CommitCmd')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -100,16 +104,18 @@ except Exception as e:
 
 def build_insert_form_edge_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         # Requires selecting an edge. Defaulting to first edge.
         edge = target.edges.item(0)
-        forms = root.features.formFeatures
         # Using text command as high-level API for T-Spline editing is often restricted
         ui.activeSelections.clear()
         ui.activeSelections.add(edge)
         app.executeTextCommand(u'Commands.Start TSplineInsertEdgeCommand')
         app.executeTextCommand(u'NuCommands.CommitCmd')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -118,13 +124,16 @@ except Exception as e:
 
 def build_subdivide_form_face_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         face = target.faces.item(0)
         ui.activeSelections.clear()
         ui.activeSelections.add(face)
         app.executeTextCommand(u'Commands.Start TSplineSubdivideCommand')
         app.executeTextCommand(u'NuCommands.CommitCmd')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -133,8 +142,10 @@ except Exception as e:
 
 def build_create_form_crease_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
+    target = find_tspline_body_recursive(root, params['body'])
     if target and target.objectType == adsk.fusion.TSplineBody.classType():
+        form_feature = target.parentFormFeature
+        form_feature.startEdit()
         # Crease the first loop of edges
         edges = adsk.core.ObjectCollection.create()
         for i in range(min(5, target.edges.count)):
@@ -143,6 +154,7 @@ def build_create_form_crease_script() -> str:
         for e in edges: ui.activeSelections.add(e)
         app.executeTextCommand(u'Commands.Start TSplineCreaseCommand')
         app.executeTextCommand(u'NuCommands.CommitCmd')
+        form_feature.finishEdit()
         returnValue.append("OK")
     else: returnValue.append("ERR_NOT_A_FORM")
 except Exception as e:
@@ -217,11 +229,15 @@ except Exception as e:
 
 def build_create_form_box_script() -> str:
     return """try:
-    center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
     forms = root.features.formFeatures
-    # addBox(center, length, width, height, l_faces, w_faces, h_faces)
-    form_feat = forms.addBox(center, params['l'], params['w'], params['h'], params.get('l_faces', 2), params.get('w_faces', 2), params.get('h_faces', 2))
-    returnValue.append(form_feat.bodies.item(0).name)
+    form_feat = forms.add()
+    if not form_feat:
+        returnValue.append("ERR_UNSUPPORTED")
+    else:
+        # The public Python API exposes creating an empty form feature and importing TSM data,
+        # but not primitive helpers like addBox in the current runtime.
+        form_feat.deleteMe()
+        returnValue.append("ERR_UNSUPPORTED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 

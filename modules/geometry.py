@@ -240,6 +240,8 @@ def create_coil_logic(dia: float, h: float, p: float, sec_t: float, name: str, x
     try:
         res = execute_fusion_script(build_create_coil_script(), {"dia": dia, "h": h, "p": p, "sec_t": sec_t, "name": name, "x": x, "y": y, "z": z})
         val = res.get("data", [""])[0]
+        if isinstance(val, str) and "Command unavailable in this context" in val:
+            return "Error: Coil creation is not available in the current Fusion command/runtime context."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return f"Coil '{val}' created."
     except FusionBridgeError as e: return f"Error: {str(e)}"

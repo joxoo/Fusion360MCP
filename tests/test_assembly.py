@@ -14,6 +14,12 @@ class TestAssembly(unittest.TestCase):
         self.assertEqual(res, "Component 'Motor' created.")
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['name'], "Motor")
+        
+    def test_component_activation_script(self):
+        from modules.assembly_scripts import build_create_component_script
+        script = build_create_component_script()
+        self.assertIn("occ.activate()", script)
+        self.assertIn("target = active_comp", script)
 
     @patch('core.bridge.requests.post')
     def test_create_joint_params(self, mock_post):

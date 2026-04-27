@@ -65,5 +65,11 @@ class TestForms(unittest.TestCase):
         res = create_form_box_logic(10, 10, 10, 0, 0, 0, 2, 2, 2, "en")
         self.assertEqual(res, "Form box 'FormBox1' created.")
 
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_box_unsupported(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
+        res = create_form_box_logic(10, 10, 10, 0, 0, 0, 2, 2, 2, "en")
+        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
+
 if __name__ == '__main__':
     unittest.main()

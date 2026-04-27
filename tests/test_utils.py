@@ -34,11 +34,11 @@ class TestUtils(unittest.TestCase):
 
         register_tool(mcp, "create_sketch", dummy_logic)
 
-        # Check if only canonical name was registered
+        # Check canonical name plus supported compatibility alias
         self.assertIn("create_sketch", captured)
-        self.assertNotIn("skizze_erstellen", captured)
+        self.assertIn("skizze_erstellen", captured)
 
-    def test_register_tool_signature_preserves_lang(self):
+    def test_register_tool_signature_hides_lang(self):
         mcp = MagicMock()
         captured = {}
         mcp.tool = lambda name, description: (lambda f: captured.update({name: f}) or f)
@@ -49,12 +49,80 @@ class TestUtils(unittest.TestCase):
         register_tool(mcp, "sketch_polygon", polygon_logic)
 
         en_sig = inspect.signature(captured["sketch_polygon"])
-        # The current simple implementation registers the function directly, so lang is preserved
         self.assertEqual(
             list(en_sig.parameters.keys()),
-            ["sketch_name", "cx", "cy", "radius", "sides", "lang"],
+            ["sketch_name", "cx", "cy", "radius", "sides"],
         )
-        self.assertIn("lang", en_sig.parameters)
+        self.assertNotIn("lang", en_sig.parameters)
+
+    def test_register_tool_filters_extra_kwargs_and_sets_default_lang(self):
+        mcp = MagicMock()
+        captured = {}
+        mcp.tool = lambda name, description: (lambda f: captured.update({name: f}) or f)
+
+        observed = {}
+
+        def snap_logic(path_sketch, lang="en"):
+            observed["path_sketch"] = path_sketch
+            observed["lang"] = lang
+            return "OK"
+
+        register_tool(mcp, "create_snap_fit", snap_logic)
+        result = captured["create_snap_fit"](path_sketch="SnapFit_Path", wait_for_previous=True)
+
+        self.assertEqual(result, "OK")
+        self.assertEqual(observed, {"path_sketch": "SnapFit_Path", "lang": "en"})
+
+    def test_register_tool_maps_parameter_aliases(self):
+        mcp = MagicMock()
+        captured = {}
+        mcp.tool = lambda name, description: (lambda f: captured.update({name: f}) or f)
+
+        observed = {}
+
+        def polygon_logic(sketch_name, cx, cy, radius, sides, lang="en"):
+            observed.update({
+                "sketch_name": sketch_name,
+                "cx": cx,
+                "cy": cy,
+                "radius": radius,
+                "sides": sides,
+                "lang": lang,
+            })
+            return "OK"
+
+        register_tool(mcp, "sketch_polygon", polygon_logic)
+        result = captured["polygon_zeichnen"](
+            skizzen_name="SmokeSketch",
+            center_x=10,
+            center_y=10,
+            radius=3,
+            seiten=6,
+        )
+
+        self.assertEqual(result, "OK")
+        self.assertEqual(observed["sketch_name"], "SmokeSketch")
+        self.assertEqual(observed["cx"], 10)
+        self.assertEqual(observed["cy"], 10)
+        self.assertEqual(observed["radius"], 3)
+        self.assertEqual(observed["sides"], 6)
+        self.assertEqual(observed["lang"], "en")
+
+    def test_alias_tool_signature_exposes_alias_parameter_names(self):
+        mcp = MagicMock()
+        captured = {}
+        mcp.tool = lambda name, description: (lambda f: captured.update({name: f}) or f)
+
+        def polygon_logic(sketch_name, cx, cy, radius, sides, lang="en"):
+            return "OK"
+
+        register_tool(mcp, "sketch_polygon", polygon_logic)
+
+        alias_sig = inspect.signature(captured["polygon_zeichnen"])
+        self.assertEqual(
+            list(alias_sig.parameters.keys()),
+            ["skizzen_name", "center_x", "center_y", "radius", "seiten"],
+        )
 
     def test_draw_slot_uses_sketch_api_not_sketch_curves_collection(self):
         with patch('modules.sketch.execute_fusion_script') as mock_exec:
