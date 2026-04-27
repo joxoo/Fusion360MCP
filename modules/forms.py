@@ -171,6 +171,8 @@ def create_form_sphere_logic(dia: float, x: float = 0, y: float = 0, z: float = 
             "dia": dia, "x": x, "y": y, "z": z, "long_faces": long_faces, "lat_faces": lat_faces
         })
         val = res.get("data", [""])[0]
+        if val == "ERR_UNSUPPORTED":
+            return "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return f"Form sphere '{val}' created."
     except FusionBridgeError as e: return f"Error: {str(e)}"
@@ -182,6 +184,8 @@ def create_form_cylinder_logic(r: float, h: float, x: float = 0, y: float = 0, z
             "r": r, "h": h, "x": x, "y": y, "z": z, "h_faces": h_faces, "d_faces": d_faces
         })
         val = res.get("data", [""])[0]
+        if val == "ERR_UNSUPPORTED":
+            return "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return f"Form cylinder '{val}' created."
     except FusionBridgeError as e: return f"Error: {str(e)}"
@@ -193,6 +197,8 @@ def create_form_plane_logic(l: float, w: float, x: float = 0, y: float = 0, z: f
             "l": l, "w": w, "x": x, "y": y, "z": z, "l_faces": l_faces, "w_faces": w_faces
         })
         val = res.get("data", [""])[0]
+        if val == "ERR_UNSUPPORTED":
+            return "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return f"Form plane '{val}' created."
     except FusionBridgeError as e: return f"Error: {str(e)}"
@@ -204,6 +210,8 @@ def create_form_torus_logic(major_r: float, minor_r: float, x: float = 0, y: flo
             "major_r": major_r, "minor_r": minor_r, "x": x, "y": y, "z": z, "r_faces": r_faces, "p_faces": p_faces
         })
         val = res.get("data", [""])[0]
+        if val == "ERR_UNSUPPORTED":
+            return "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime."
         if isinstance(val, str) and val.startswith("ERR_"): return val
         return f"Form torus '{val}' created."
     except FusionBridgeError as e: return f"Error: {str(e)}"

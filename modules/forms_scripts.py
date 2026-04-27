@@ -244,43 +244,51 @@ except Exception as e:
 
 def build_create_form_sphere_script() -> str:
     return """try:
-    center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
     forms = root.features.formFeatures
-    # addSphere(center, diameter, long_faces, lat_faces)
-    form_feat = forms.addSphere(center, params['dia'], params.get('long_faces', 8), params.get('lat_faces', 8))
-    returnValue.append(form_feat.bodies.item(0).name)
+    form_feat = forms.add()
+    if not form_feat:
+        returnValue.append("ERR_UNSUPPORTED")
+    else:
+        form_feat.deleteMe()
+        returnValue.append("ERR_UNSUPPORTED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
 def build_create_form_cylinder_script() -> str:
     return """try:
-    center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
     forms = root.features.formFeatures
-    # addCylinder(center, radius, height, h_faces, d_faces)
-    form_feat = forms.addCylinder(center, params['r'], params['h'], params.get('h_faces', 4), params.get('d_faces', 8))
-    returnValue.append(form_feat.bodies.item(0).name)
+    form_feat = forms.add()
+    if not form_feat:
+        returnValue.append("ERR_UNSUPPORTED")
+    else:
+        form_feat.deleteMe()
+        returnValue.append("ERR_UNSUPPORTED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
 def build_create_form_plane_script() -> str:
     return """try:
-    center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
     forms = root.features.formFeatures
-    # addPlane(center, length, width, l_faces, w_faces)
-    form_feat = forms.addPlane(center, params['l'], params['w'], params.get('l_faces', 2), params.get('w_faces', 2))
-    returnValue.append(form_feat.bodies.item(0).name)
+    form_feat = forms.add()
+    if not form_feat:
+        returnValue.append("ERR_UNSUPPORTED")
+    else:
+        form_feat.deleteMe()
+        returnValue.append("ERR_UNSUPPORTED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
 def build_create_form_torus_script() -> str:
     return """try:
-    center = adsk.core.Point3D.create(params['x'], params['y'], params['z'])
     forms = root.features.formFeatures
-    # addTorus(center, major_r, minor_r, r_faces, p_faces)
-    form_feat = forms.addTorus(center, params['major_r'], params['minor_r'], params.get('r_faces', 8), params.get('p_faces', 8))
-    returnValue.append(form_feat.bodies.item(0).name)
+    form_feat = forms.add()
+    if not form_feat:
+        returnValue.append("ERR_UNSUPPORTED")
+    else:
+        form_feat.deleteMe()
+        returnValue.append("ERR_UNSUPPORTED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
