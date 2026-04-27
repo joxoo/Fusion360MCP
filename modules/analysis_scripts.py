@@ -1,10 +1,11 @@
+import json
+
 def build_get_volumetric_properties_script() -> str:
     return """import json
 try:
     target = find_body_recursive(root, params['body'])
     if target:
         props = target.physicalProperties
-        # Moments of Inertia returns (success, ixx, iyy, izz, ixy, iyz, ixz)
         res, ixx, iyy, izz, ixy, iyz, ixz = props.getXYZMomentsOfInertia()
         
         info = {
@@ -57,12 +58,9 @@ def build_check_interference_script() -> str:
         if b: bodies.add(b)
     
     if bodies.count > 1:
-        # Create interference input
         design = adsk.fusion.Design.cast(app.activeProduct)
         int_input = design.createInterferenceInput(bodies)
         int_input.areCoincidentFacesIncluded = params.get('include_coincident', False)
-        
-        # Analyze
         results = design.analyzeInterference(int_input)
         returnValue.append(str(results.count))
     else:
@@ -77,7 +75,6 @@ def build_create_draft_analysis_script() -> str:
     if target:
         pull_dir = root.zConstructionAxis
         analyses = root.analyses
-        # Convert degrees to radians
         min_angle = params.get('min_angle', 0.5) * (3.14159 / 180.0)
         max_angle = params.get('max_angle', 5.0) * (3.14159 / 180.0)
         
@@ -104,6 +101,39 @@ try:
     returnValue.append(encoded)
 except Exception as e:
     returnValue.append(f"Error: {str(e)}")"""
+
+
+def build_capture_standard_views_script() -> str:
+    return """import base64, os, tempfile, json
+try:
+    vp = app.activeViewport
+    cam = vp.camera
+    temp_dir = tempfile.gettempdir()
+    results = {}
+    
+    views = [
+        ("top", adsk.core.ViewOrientations.TopViewOrientation),
+        ("front", adsk.core.ViewOrientations.FrontViewOrientation),
+        ("right", adsk.core.ViewOrientations.RightViewOrientation),
+        ("iso", adsk.core.ViewOrientations.IsoTopRightViewOrientation)
+    ]
+    
+    for name, orient in views:
+        cam.viewOrientation = orient
+        cam.isFitView = True
+        vp.camera = cam
+        vp.refresh()
+        adsk.doEvents()
+        
+        path = os.path.join(temp_dir, f"cap_{name}.png")
+        vp.saveAsImageFile(path, 800, 600)
+        with open(path, "rb") as f:
+            results[name] = base64.b64encode(f.read()).decode('utf-8')
+        os.remove(path)
+            
+    returnValue.append(json.dumps(results))
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
 
 
 def build_analyze_bodies_script() -> str:
@@ -155,7 +185,6 @@ try:
         "manifold_issues": []
     }
     
-    # 1. Analyze Each Body
     all_bodies = adsk.core.ObjectCollection.create()
     for b in root.bRepBodies:
         all_bodies.add(b)
@@ -168,7 +197,6 @@ try:
         if not is_solid:
             results["manifold_issues"].append(f"Body '{b.name}' is not a closed solid (surface only).")
 
-    # 2. Check Interferences
     if root.bRepBodies.count > 1:
         design = adsk.fusion.Design.cast(app.activeProduct)
         int_input = design.createInterferenceInput(all_bodies)

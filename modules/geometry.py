@@ -8,6 +8,7 @@ from modules.geometry_scripts import (
     build_create_circular_pattern_script,
     build_create_rectangular_pattern_script,
     build_create_fillet_script,
+    build_create_edge_fillet_script,
     build_extrude_sketch_script,
     build_create_hole_script,
     build_create_cylinder_script,
@@ -16,6 +17,8 @@ from modules.geometry_scripts import (
     build_create_coil_script,
     build_create_pipe_script,
     build_create_revolve_script,
+    build_create_sweep_script,
+    build_create_feature_pattern_script,
     build_create_boundary_fill_script,
     build_create_hole_advanced_script,
     build_create_pattern_on_path_script,
@@ -25,6 +28,11 @@ from modules.geometry_scripts import (
     build_scale_body_script,
     build_move_body_script,
     build_move_body_absolute_script,
+    build_delete_body_script,
+    build_rename_body_script,
+    build_get_feature_history_script,
+    build_delete_feature_script,
+    build_edit_feature_script,
     build_delete_face_script,
     build_offset_face_script,
     build_move_face_script,
@@ -33,6 +41,37 @@ from modules.geometry_scripts import (
     build_create_plastic_boss_script,
     build_create_snap_fit_script,
 )
+import json
+
+def get_feature_history_logic(lang: str = "en"):
+    """Returns the timeline history of construction features."""
+    try:
+        res = execute_fusion_script(build_get_feature_history_script())
+        return res.get("data", ["[]"])[0]
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def delete_feature_logic(feature_name: str, lang: str = "en"):
+    """Deletes a specific feature from the timeline."""
+    try:
+        res = execute_fusion_script(build_delete_feature_script(), {"feature_name": feature_name})
+        val = res.get("data", [""])[0]
+        if val == "ERR_NOT_FOUND": return f"Error: Feature '{feature_name}' not found."
+        return f"Feature '{feature_name}' deleted."
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def edit_feature_logic(feature_name: str, new_name: str = None, suppress: bool = None, value: str = None, lang: str = "en"):
+    """Edits a feature (Rename, Suppress, or update simple parameters)."""
+    params = {"feature_name": feature_name}
+    if new_name is not None: params["new_name"] = new_name
+    if suppress is not None: params["suppress"] = suppress
+    if value is not None: params["value"] = value
+    
+    try:
+        res = execute_fusion_script(build_edit_feature_script(), params)
+        val = res.get("data", [""])[0]
+        if val == "ERR_NOT_FOUND": return f"Error: Feature '{feature_name}' not found."
+        return f"Feature '{feature_name}' updated."
+    except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def delete_face_logic(body: str, face_index: int = 0, lang: str = "en"):
     """Deletes a specific face from a body (Direct Modeling)."""
@@ -123,6 +162,24 @@ def combine_bodies_logic(target: str, tool_bodies: list, operation: str = "Join"
         return "Bodies successfully combined."
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
+def delete_body_logic(body: str, lang: str = "en"):
+    """Permanently deletes a body from the design."""
+    try:
+        res = execute_fusion_script(build_delete_body_script(), {"body": body}, use_common=["find_body"])
+        val = res.get("data", [""])[0]
+        if val == "ERR_NOT_FOUND": return format_response(lang, "body_not_found")
+        return f"Body '{body}' deleted."
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def rename_body_logic(old_name: str, new_name: str, lang: str = "en"):
+    """Renames a body to maintain organizational clarity."""
+    try:
+        res = execute_fusion_script(build_rename_body_script(), {"old_name": old_name, "new_name": new_name}, use_common=["find_body"])
+        val = res.get("data", [""])[0]
+        if val == "ERR_NOT_FOUND": return format_response(lang, "body_not_found")
+        return f"Body renamed from '{old_name}' to '{val}'."
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
 def split_body_logic(body: str, tool: str, lang: str = "en"):
     """Splits a body using a plane or another body."""
     try:
@@ -211,6 +268,30 @@ def create_revolve_logic(sketch_name: str, axis: str = "Z", angle: float = 360.0
         if val == "ERR_SKETCH": return format_response(lang, "sketch_not_found")
         if val.startswith("ERR_"): return val
         return f"Revolve feature created: {val}"
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def create_sweep_advanced_logic(profile_sketch: str, path_sketch: str, twist: float = 0, lang: str = "en"):
+    """Creates a sweep along a path with an optional twist angle."""
+    try:
+        res = execute_fusion_script(build_create_sweep_script(), {
+            "profile_sketch": profile_sketch, "path_sketch": path_sketch, "twist": twist
+        }, use_common=["find_sketch", "find_profile"])
+        val = res.get("data", [""])[0]
+        if val == "ERR_INPUT": return "Error: Profile sketch or path sketch not found."
+        if isinstance(val, str) and val.startswith("ERR_"): return val
+        return f"Sweep feature '{val}' created."
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
+def create_feature_pattern_logic(feature_name: str, count: int, axis: str = "Z", lang: str = "en"):
+    """Creates a circular pattern of a construction feature (e.g. an extrusion)."""
+    try:
+        res = execute_fusion_script(build_create_feature_pattern_script(), {
+            "feature_name": feature_name, "count": count, "axis": axis
+        })
+        val = res.get("data", [""])[0]
+        if val == "ERR_FEATURE_NOT_FOUND": return f"Error: Feature '{feature_name}' not found."
+        if val == "OK": return f"Feature pattern for '{feature_name}' created."
+        return val
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
 def create_boundary_fill_logic(tool_bodies: list, lang: str = "en"):
@@ -332,6 +413,15 @@ def create_fillet_logic(body_name: str, radius: float, lang: str = "en"):
         return format_response(lang, "fillet_created")
     except FusionBridgeError as e: return f"Error: {str(e)}"
 
+def create_edge_fillet_logic(body: str, radius: float, lang: str = "en"):
+    """Creates fillets on specific edges of a body."""
+    try:
+        res = execute_fusion_script(build_create_edge_fillet_script(), {"body": body, "r": radius}, use_common=["find_body"])
+        val = res.get("data", [""])[0]
+        if val == "ERR_BODY": return format_response(lang, "body_not_found")
+        return format_response(lang, "fillet_created")
+    except FusionBridgeError as e: return f"Error: {str(e)}"
+
 def extrude_sketch_logic(sketch_name: str, distance: float, lang: str = "en"):
     """Extrudes the first profile of a sketch."""
     try:
@@ -359,6 +449,11 @@ def register_geometry_tools(mcp):
     register_tool(mcp, "create_coil", create_coil_logic)
     register_tool(mcp, "create_pipe", create_pipe_logic)
     register_tool(mcp, "create_revolve", create_revolve_logic)
+    register_tool(mcp, "create_sweep_advanced", create_sweep_advanced_logic)
+    register_tool(mcp, "create_feature_pattern", create_feature_pattern_logic)
+    register_tool(mcp, "get_feature_history", get_feature_history_logic)
+    register_tool(mcp, "delete_feature", delete_feature_logic)
+    register_tool(mcp, "edit_feature", edit_feature_logic)
     register_tool(mcp, "create_boundary_fill", create_boundary_fill_logic)
     register_tool(mcp, "create_hole_advanced", create_hole_advanced_logic)
     register_tool(mcp, "create_hole", create_hole_logic)
@@ -367,6 +462,8 @@ def register_geometry_tools(mcp):
     register_tool(mcp, "create_pattern_on_path", create_pattern_on_path_logic)
     register_tool(mcp, "mirror_features", mirror_features_logic)
     register_tool(mcp, "combine_bodies", combine_bodies_logic)
+    register_tool(mcp, "delete_body", delete_body_logic)
+    register_tool(mcp, "rename_body", rename_body_logic)
     register_tool(mcp, "split_body", split_body_logic)
     register_tool(mcp, "scale_body", scale_body_logic)
     register_tool(mcp, "move_body", move_body_logic)
@@ -382,4 +479,5 @@ def register_geometry_tools(mcp):
     register_tool(mcp, "create_chamfer", create_chamfer_logic)
     register_tool(mcp, "create_shell", create_shell_logic)
     register_tool(mcp, "create_fillet", create_fillet_logic)
+    register_tool(mcp, "create_edge_fillet", create_edge_fillet_logic)
     register_tool(mcp, "mirror_body", mirror_body_logic)

@@ -1,13 +1,15 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from modules.design import (
     direct_api_access_logic,
     cleanup_design_logic,
     create_new_design_logic,
-    restart_mcp_logic
+    restart_mcp_logic,
+    list_mcp_tools_logic,
+    register_design_tools
 )
 
-class TestDesignRefactored(unittest.TestCase):
+class TestDesignRefactored(unittest.IsolatedAsyncioTestCase):
     @patch('core.bridge.requests.post')
     def test_direct_api_access_joins_output(self, mock_post):
         mock_response = MagicMock()
@@ -58,6 +60,31 @@ class TestDesignRefactored(unittest.TestCase):
         self.assertEqual(res, "MCP restart command sent.")
         sent_script = mock_post.call_args[1]['json']['payload']['script']
         self.assertIn("start_mcp_server()", sent_script)
+
+    async def test_list_mcp_tools_logic(self):
+        # 1. Setup MCP Mock
+        mock_mcp = MagicMock()
+        tool1 = MagicMock(); tool1.name = "apple"; tool1.description = "desc1"
+        tool2 = MagicMock(); tool2.name = "banana"; tool2.description = "desc2"
+        
+        # FastMCP.list_tools is async
+        mock_mcp.list_tools = AsyncMock(return_value=[tool1, tool2])
+        
+        # 2. Register to set global _mcp_instance
+        register_design_tools(mock_mcp)
+        
+        # 3. Call logic
+        res = await list_mcp_tools_logic("en")
+        
+        self.assertIn("Registered Fusion360 MCP Tools:", res)
+        self.assertIn("- apple: desc1", res)
+        self.assertIn("- banana: desc2", res)
+        
+    async def test_list_mcp_tools_no_init(self):
+        # Reset global instance for this test
+        with patch('modules.design._mcp_instance', None):
+            res = await list_mcp_tools_logic("en")
+            self.assertEqual(res, "Error: MCP instance not initialized.")
 
 if __name__ == '__main__':
     unittest.main()

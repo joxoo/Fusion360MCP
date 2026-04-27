@@ -1,3 +1,5 @@
+import json
+
 def build_create_chamfer_script() -> str:
     return """try:
     target = find_body_recursive(root, params['body'])
@@ -82,6 +84,75 @@ except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
+def build_create_sweep_script() -> str:
+    return """try:
+    # Find profile
+    prof = None
+    for sk in active_comp.sketches:
+        if sk.name == params['profile_sketch'] and sk.profiles.count > 0:
+            prof = sk.profiles.item(0)
+            break
+            
+    # Find path
+    path_sk = None
+    for sk in active_comp.sketches:
+        if sk.name == params['path_sketch'] and sk.sketchCurves.count > 0:
+            path_sk = sk
+            break
+    
+    path = path_sk.sketchCurves.item(0) if path_sk else None
+    
+    if prof and path_sk and path_sk.sketchCurves.count > 0:
+        sweeps = active_comp.features.sweepFeatures
+        # Erstelle ein echtes Path-Objekt aus der ersten Kurve der Skizze
+        path = active_comp.features.createPath(path_sk.sketchCurves.item(0))
+        s_in = sweeps.createInput(prof, path, adsk.fusion.FeatureOperations.JoinFeatureOperation)
+        if params.get('twist', 0) != 0:
+            s_in.twistAngle = adsk.core.ValueInput.createByString(f"{params['twist']} deg")
+        s_feat = sweeps.add(s_in)
+        returnValue.append(s_feat.name)
+    else: returnValue.append("ERR_INPUT")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_create_feature_pattern_script() -> str:
+    return """try:
+    target_name = params['feature_name']
+    feature = None
+    
+    # Check common feature types
+    collections = [
+        active_comp.features.extrudeFeatures,
+        active_comp.features.revolveFeatures,
+        active_comp.features.sweepFeatures,
+        active_comp.features.holeFeatures,
+        active_comp.features.filletFeatures,
+        active_comp.features.chamferFeatures
+    ]
+    
+    for coll in collections:
+        for f in coll:
+            if f.name == target_name:
+                feature = f
+                break
+        if feature: break
+        
+    if feature:
+        ents = adsk.core.ObjectCollection.create()
+        ents.add(feature)
+        axis = {"X": active_comp.xConstructionAxis, "Y": active_comp.yConstructionAxis, "Z": active_comp.zConstructionAxis}.get(params['axis'], active_comp.zConstructionAxis)
+        
+        patterns = active_comp.features.circularPatternFeatures
+        p_in = patterns.createInput(ents, axis)
+        p_in.quantity = adsk.core.ValueInput.createByReal(params['count'])
+        p_feat = patterns.add(p_in)
+        returnValue.append("OK")
+    else: returnValue.append("ERR_FEATURE_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
 def build_create_hole_advanced_script() -> str:
     return """try:
     # Find the target face for placement
@@ -162,8 +233,6 @@ except Exception as e:
 
 def build_mirror_features_script() -> str:
     return """try:
-    # This is more complex because we need the actual Feature objects, not bodies.
-    # We attempt to find features by name in the timeline.
     target_feat = None
     for f in active_comp.features:
         if f.name == params['feature_name']:
@@ -188,7 +257,6 @@ def build_delete_face_script() -> str:
     return """try:
     target = find_body_recursive(root, params['body'])
     if target:
-        # For simplicity, we delete the first face or a face at index if provided
         face_idx = params.get('face_index', 0)
         if face_idx < target.faces.count:
             face = target.faces.item(face_idx)
@@ -262,8 +330,6 @@ def build_combine_bodies_script() -> str:
             combines.add(c_in)
             returnValue.append("OK")
         except:
-            # Falls Combine fehlschlägt (oft wegen Berührung ohne Überlappung), 
-            # geben wir einen Hinweis zurück, damit die KI neu positionieren kann.
             returnValue.append("ERR_COMBINE_FAILED_GEOMETRY")
     else: returnValue.append("ERR_NOT_FOUND")
 except Exception as e:
@@ -275,10 +341,8 @@ def build_move_body_absolute_script() -> str:
     target = find_body_recursive(root, params['body'])
     if target:
         ents = adsk.core.ObjectCollection.create(); ents.add(target)
-        # Aktueller Schwerpunkt
         current_center = target.physicalProperties.centerOfMass
         
-        # Differenz berechnen
         dx = params['x'] - current_center.x
         dy = params['y'] - current_center.y
         dz = params['z'] - current_center.z
@@ -290,6 +354,28 @@ def build_move_body_absolute_script() -> str:
         m_in = moves.createInput(ents, transform)
         moves.add(m_in)
         returnValue.append("OK")
+    else: returnValue.append("ERR_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_delete_body_script() -> str:
+    return """try:
+    target = find_body_recursive(root, params['body'])
+    if target:
+        target.deleteMe()
+        returnValue.append("OK")
+    else: returnValue.append("ERR_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_rename_body_script() -> str:
+    return """try:
+    target = find_body_recursive(root, params['old_name'])
+    if target:
+        target.name = params['new_name']
+        returnValue.append(target.name)
     else: returnValue.append("ERR_NOT_FOUND")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
@@ -319,7 +405,6 @@ def build_split_body_script() -> str:
         elif target:
             returnValue.append("ERR_TOOL")
         else:
-            # Fallback for error message compatibility with geometry.py
             bodies = [b.name for b in root.bRepBodies]
             returnValue.append(f"ERR_BODY (Available: {bodies})")
 except Exception as e:
@@ -349,10 +434,8 @@ def build_move_body_script() -> str:
         ents = adsk.core.ObjectCollection.create(); ents.add(target)
         moves = active_comp.features.moveFeatures
         transform = adsk.core.Matrix3D.create()
-        # Translation
         vector = adsk.core.Vector3D.create(params['x'], params['y'], params['z'])
         transform.translation = vector
-        # Rotation (simplified: around Z axis if angle provided)
         if params.get('angle', 0) != 0:
             rot_mat = adsk.core.Matrix3D.create()
             rot_mat.setToRotation(params['angle'] * (3.14159/180.0), active_comp.zConstructionAxis, root.originConstructionPoint)
@@ -415,7 +498,6 @@ def build_create_plastic_boss_script() -> str:
             b_in = bosses.createInput()
             b_in.setPositionBySketchPoints(pts)
 
-            # Create side input
             side = b_in.createSideInput()
             side.isEnabled = True
             side.setSimple(adsk.core.ValueInput.createByReal(0.8), adsk.core.ValueInput.createByReal(0.4))
@@ -453,7 +535,6 @@ def build_create_snap_fit_script() -> str:
             sel.add(pt)
             
             s_in = snaps.createInput(sel, adsk.fusion.SnapFitType.ParallelHookAndGrooveSnapFitType)
-            # Try to find target bodies for hook and groove
             if root.bRepBodies.count >= 1:
                 s_in.hookBody = root.bRepBodies.item(0)
             if root.bRepBodies.count >= 2:
@@ -490,7 +571,6 @@ def build_create_sphere_script() -> str:
     radius = params['r']
     sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
     
-    # Draw a semi-circle arc on the XY plane (vertical-ish)
     startPoint = adsk.core.Point3D.create(center.x, center.y + radius, center.z)
     endPoint = adsk.core.Point3D.create(center.x, center.y - radius, center.z)
     alongArcPoint = adsk.core.Point3D.create(center.x + radius, center.y, center.z)
@@ -521,17 +601,12 @@ def build_create_torus_script() -> str:
     major_r = params['major_r']
     minor_r = params['minor_r']
     
-    # Create sketch on XY plane
     sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
-    
-    # Draw circle for cross section, offset by major radius
     circle_center = adsk.core.Point3D.create(center.x + major_r, center.y, center.z)
     sk.sketchCurves.sketchCircles.addByCenterRadius(circle_center, minor_r)
     
-    # Axis for revolution (Z axis through center)
     axis_start = adsk.core.Point3D.create(center.x, center.y, center.z)
     axis_end = adsk.core.Point3D.create(center.x, center.y, center.z + 1.0)
-    # We can use construction axis or a line
     axisLine = sk.sketchCurves.sketchLines.addByTwoPoints(axis_start, axis_end)
     
     if sk.profiles.count > 0:
@@ -672,6 +747,22 @@ except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
+def build_create_edge_fillet_script() -> str:
+    return """try:
+    target = find_body_recursive(root, params['body'])
+    if target:
+        fillets = active_comp.features.filletFeatures
+        edge_col = adsk.core.ObjectCollection.create()
+        for edge in target.edges: edge_col.add(edge)
+        f_in = fillets.createInput()
+        f_in.addConstantRadiusEdgeSet(edge_col, adsk.core.ValueInput.createByReal(params['r']), True)
+        fillets.add(f_in)
+        returnValue.append("OK")
+    else: returnValue.append("ERR_BODY")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
 def build_extrude_sketch_script() -> str:
     return """try:
     s = next((sk for sk in active_comp.sketches if sk.name == params['sketch']), None)
@@ -683,6 +774,73 @@ def build_extrude_sketch_script() -> str:
         ext = extrudes.add(ext_in)
         returnValue.append(ext.bodies.item(0).name)
     else: returnValue.append("ERR_SKETCH")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_get_feature_history_script() -> str:
+    return """try:
+    history = []
+    # Wir listen alle Features der aktiven Komponente in chronologischer Reihenfolge
+    for f in active_comp.features:
+        history.append({
+            "name": f.name,
+            "type": f.objectType.split('::')[-1],
+            "is_suppressed": f.isSuppressed,
+            "health": str(f.healthState)
+        })
+    import json
+    returnValue.append(json.dumps(history))
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_delete_feature_script() -> str:
+    return """try:
+    target_name = params['feature_name']
+    feature = None
+    for f in active_comp.features:
+        if f.name == target_name:
+            feature = f
+            break
+    
+    if feature:
+        feature.deleteMe()
+        returnValue.append("OK")
+    else:
+        returnValue.append("ERR_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_edit_feature_script() -> str:
+    return """try:
+    target_name = params['feature_name']
+    feature = None
+    for f in active_comp.features:
+        if f.name == target_name:
+            feature = f
+            break
+            
+    if feature:
+        # 1. Namen ändern
+        if 'new_name' in params:
+            feature.name = params['new_name']
+            
+        # 2. Unterdrückung (Suppression)
+        if 'suppress' in params:
+            feature.isSuppressed = params['suppress']
+            
+        # 3. Parameter-Update (für einfache Features wie Extrude)
+        if 'value' in params and hasattr(feature, 'extentDefinition'):
+            # Beispiel für einfache Distanz-Extrusion
+            try:
+                feature.extentDefinition.distance.expression = str(params['value'])
+            except: pass
+            
+        returnValue.append("OK")
+    else:
+        returnValue.append("ERR_NOT_FOUND")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 

@@ -54,7 +54,7 @@ class TestAnalysis(unittest.TestCase):
     def test_check_interference_params(self, mock_exec):
         mock_exec.return_value = {"status": "success", "data": ["0"]}
         res = check_interference_logic(["Body1", "Body2"], False, "en")
-        self.assertEqual(res, "No interferences detected. The assembly fits perfectly.")
+        self.assertEqual(res, "No interferences detected.")
         params = mock_exec.call_args[0][1]
         self.assertEqual(params['body_names'], ["Body1", "Body2"])
 

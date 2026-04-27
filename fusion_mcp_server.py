@@ -42,13 +42,6 @@ register_surface_tools(mcp)
 register_mesh_tools(mcp)
 register_form_tools(mcp)
 
-
-from modules.design import create_new_design_logic
-@mcp.tool(name="test_new_design")
-def test_new_design():
-    """Manual registration test."""
-    return create_new_design_logic(lang="en")
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fusion MCP Server")
     parser.add_argument("--transport", type=str, default="sse", choices=["stdio", "sse", "streamable-http"])

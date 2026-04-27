@@ -194,20 +194,38 @@ def register_tool(mcp, tool_key, func):
     accepted_params = set(sig.parameters.keys())
     alias_map = PARAM_ALIASES.get(tool_key, {})
 
-    @functools.wraps(func)
-    def wrapper(**kwargs):
-        normalized = {}
-        for key, value in kwargs.items():
-            if key in IGNORED_TOOL_KWARGS:
-                continue
-            canonical_key = alias_map.get(key, key)
-            if canonical_key in accepted_params:
-                normalized[canonical_key] = value
+    is_async = inspect.iscoroutinefunction(func)
 
-        if "lang" in sig.parameters:
-            normalized.setdefault("lang", "en")
+    if is_async:
+        @functools.wraps(func)
+        async def wrapper(**kwargs):
+            normalized = {}
+            for key, value in kwargs.items():
+                if key in IGNORED_TOOL_KWARGS:
+                    continue
+                canonical_key = alias_map.get(key, key)
+                if canonical_key in accepted_params:
+                    normalized[canonical_key] = value
 
-        return func(**normalized)
+            if "lang" in sig.parameters:
+                normalized.setdefault("lang", "en")
+
+            return await func(**normalized)
+    else:
+        @functools.wraps(func)
+        def wrapper(**kwargs):
+            normalized = {}
+            for key, value in kwargs.items():
+                if key in IGNORED_TOOL_KWARGS:
+                    continue
+                canonical_key = alias_map.get(key, key)
+                if canonical_key in accepted_params:
+                    normalized[canonical_key] = value
+
+            if "lang" in sig.parameters:
+                normalized.setdefault("lang", "en")
+
+            return func(**normalized)
 
     public_params = [
         param for name, param in sig.parameters.items()
@@ -236,11 +254,25 @@ def register_tool(mcp, tool_key, func):
                         annotation=canonical_param.annotation,
                     )
                 )
-            alias_wrapper = functools.wraps(func)(lambda **kwargs: wrapper(**kwargs))
+            
+            if is_async:
+                async def async_alias_wrapper(**kwargs):
+                    return await wrapper(**kwargs)
+                alias_wrapper = functools.wraps(func)(async_alias_wrapper)
+            else:
+                alias_wrapper = functools.wraps(func)(lambda **kwargs: wrapper(**kwargs))
+                
             alias_wrapper.__signature__ = sig.replace(parameters=alias_parameters)
             alias_wrapper.__annotations__ = {
                 alias_name: sig.parameters[canonical_name].annotation
                 for alias_name, canonical_name in alias_signature_map.items()
             }
+        else:
+            if is_async:
+                async def async_simple_alias_wrapper(**kwargs):
+                    return await wrapper(**kwargs)
+                alias_wrapper = functools.wraps(func)(async_simple_alias_wrapper)
+            else:
+                alias_wrapper = wrapper
 
         mcp.tool(name=alias, description=desc)(alias_wrapper)
