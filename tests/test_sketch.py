@@ -7,7 +7,12 @@ from modules.sketch import (
     create_sketch_circular_pattern_logic
 )
 
+from core.utils import load_i18n
+
 class TestSketch(unittest.TestCase):
+    def setUp(self):
+        load_i18n()
+
     @patch('core.bridge.requests.post')
     def test_create_sketch_params(self, mock_post):
         mock_response = MagicMock()
@@ -23,7 +28,8 @@ class TestSketch(unittest.TestCase):
         self.assertEqual(params['plane'], "XZ")
         self.assertEqual(params['name'], "MySketch")
         script = sent_payload['payload']['script']
-        self.assertIn("root.sketches.add(plane)", script)
+        self.assertIn("resolve_sketch_creation_context(params)", script)
+        self.assertIn("owner_comp.sketches.add(target_plane)", script)
 
     @patch('core.bridge.requests.post')
     def test_draw_line_params(self, mock_post):

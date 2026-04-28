@@ -29,6 +29,7 @@ class TestGeometryExtended(unittest.TestCase):
         script = mock_post.call_args[1]['json']['payload']['script']
         self.assertIn('dia_val = float(params[\'dia_mm\'])', script)
         self.assertIn('adsk.fusion.ThreadInfo.create', script)
+        self.assertIn('target_comp.features.threadFeatures', script)
 
     @patch('core.bridge.requests.post')
     def test_create_gear_solid_logic(self, mock_post):
@@ -53,13 +54,24 @@ class TestGeometryExtended(unittest.TestCase):
         # Verify involute-style Autodesk-inspired strategy and center-hole cut
         self.assertIn("def involute_point(base_radius, dist_from_center):", script)
         self.assertIn("cyl_face = next((f for f in gear_base.faces", script)
-        self.assertIn("root.features.circularPatternFeatures.createInput(input_ents, cyl_face)", script)
-        self.assertIn("root.features.combineFeatures.add(combine_input)", script)
+        self.assertIn("target_comp.features.circularPatternFeatures.createInput(input_ents, cyl_face)", script)
+        self.assertIn("target_comp.features.combineFeatures.add(combine_input)", script)
         self.assertIn("CutFeatureOperation", script)
         self.assertIn("hole_sketch.sketchCurves.sketchCircles.addByCenterRadius(center, hd / 20.0)", script)
         self.assertIn("translate_body(gear_base, px, py, pz)", script)
         self.assertIn("math.atan2(start1_local.y, start1_local.x)", script)
         self.assertIn("ERR_HOLE_TOO_LARGE", script)
+
+    @patch('core.bridge.requests.post')
+    def test_create_gear_component_scope(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["Gear_M0.4_Z20"]}
+        mock_post.return_value = mock_response
+
+        create_gear_logic(num_teeth=20, module=0.4, component_path="Root/Gears", lang="en")
+        params = mock_post.call_args[1]['json']['payload']['params']
+        self.assertEqual(params['component_path'], "Root/Gears")
 
     @patch('core.bridge.requests.post')
     def test_create_gear_rejects_oversized_hole(self, mock_post):

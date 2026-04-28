@@ -81,6 +81,8 @@ class TestGeometry(unittest.TestCase):
         self.assertEqual(res, "Bodies successfully combined.")
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['operation'], "Cut")
+        script = mock_post.call_args[1]['json']['payload']['script']
+        self.assertIn("resolve_body_context(", script)
 
     @patch('core.bridge.requests.post')
     def test_split_body_params(self, mock_post):
@@ -91,6 +93,8 @@ class TestGeometry(unittest.TestCase):
 
         res = split_body_logic("Body1", "XY", "en")
         self.assertEqual(res, "Body successfully split.")
+        script = mock_post.call_args[1]['json']['payload']['script']
+        self.assertIn("owner = owner_comp", script)
 
     @patch('core.bridge.requests.post')
     def test_split_body_tool_not_found(self, mock_post):
@@ -101,6 +105,38 @@ class TestGeometry(unittest.TestCase):
 
         res = split_body_logic("Body1", "MissingPlane", "en")
         self.assertEqual(res, "Error: Splitting tool 'MissingPlane' not found.")
+
+    @patch('core.bridge.requests.post')
+    def test_combine_bodies_owner_mismatch(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["ERR_OWNER_MISMATCH"]}
+        mock_post.return_value = mock_response
+
+        res = combine_bodies_logic("Target", ["Tool1"], "Join", "en")
+        self.assertEqual(res, "Entities belong to different components. Cross-component operations are limited.")
+
+    @patch('core.bridge.requests.post')
+    def test_split_body_owner_mismatch(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["ERR_OWNER_MISMATCH"]}
+        mock_post.return_value = mock_response
+
+        res = split_body_logic("Body1", "OtherBody", "en")
+        self.assertEqual(res, "Entities belong to different components. Cross-component operations are limited.")
+
+    @patch('core.bridge.requests.post')
+    def test_combine_bodies_component_scope(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["OK"]}
+        mock_post.return_value = mock_response
+
+        res = combine_bodies_logic("Target", ["Tool1"], "Join", "en", component_path="Root/Sub")
+        self.assertEqual(res, "Bodies successfully combined.")
+        params = mock_post.call_args[1]['json']['payload']['params']
+        self.assertEqual(params['component_path'], "Root/Sub")
 
     @patch('core.bridge.requests.post')
     def test_scale_body_params(self, mock_post):
@@ -198,13 +234,13 @@ class TestGeometryScripts(unittest.TestCase):
     def test_revolve_script_hierarchy(self):
         from modules.geometry_scripts import build_create_revolve_script
         script = build_create_revolve_script()
-        self.assertIn("active_comp.sketches", script)
+        self.assertIn("find_sketch_recursive(root, params['sketch'])", script)
         self.assertIn("active_comp.features", script)
 
     def test_split_body_script_hierarchy(self):
         from modules.geometry_scripts import build_split_body_script
         script = build_split_body_script()
-        self.assertIn("owner = active_comp", script)
+        self.assertIn("owner = owner_comp", script)
 
 if __name__ == '__main__':
     unittest.main()

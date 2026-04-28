@@ -163,10 +163,16 @@ except Exception as e:
 
 def build_create_form_extrude_script() -> str:
     return """try:
-    sk = next((s for s in root.sketches if s.name == params['sketch']), None)
-    if sk and sk.profiles.count > 0:
+    sk, owner_comp, err = resolve_sketch_context(
+        params['sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif sk and sk.profiles.count > 0:
         prof = sk.profiles.item(0)
-        forms = root.features.formFeatures
+        forms = owner_comp.features.formFeatures
         # Using direct addExtrude
         form_feat = forms.addExtrude(prof, adsk.core.ValueInput.createByReal(params['dist']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         returnValue.append(form_feat.bodies.item(0).name)
@@ -177,11 +183,17 @@ except Exception as e:
 
 def build_create_form_revolve_script() -> str:
     return """try:
-    sk = next((s for s in root.sketches if s.name == params['sketch']), None)
-    axis_entity = {"X": root.xConstructionAxis, "Y": root.yConstructionAxis, "Z": root.zConstructionAxis}.get(params['axis'], root.zConstructionAxis)
-    if sk and sk.profiles.count > 0:
+    sk, owner_comp, err = resolve_sketch_context(
+        params['sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif sk and sk.profiles.count > 0:
+        axis_entity = {"X": owner_comp.xConstructionAxis, "Y": owner_comp.yConstructionAxis, "Z": owner_comp.zConstructionAxis}.get(params['axis'], owner_comp.zConstructionAxis)
         prof = sk.profiles.item(0)
-        forms = root.features.formFeatures
+        forms = owner_comp.features.formFeatures
         angle = adsk.core.ValueInput.createByString(f"{params['angle']} deg")
         form_feat = forms.addRevolve(prof, axis_entity, angle, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         returnValue.append(form_feat.bodies.item(0).name)
@@ -192,12 +204,24 @@ except Exception as e:
 
 def build_create_form_sweep_script() -> str:
     return """try:
-    prof_sk = next((s for s in root.sketches if s.name == params['profile_sketch']), None)
-    path_sk = next((s for s in root.sketches if s.name == params['path_sketch']), None)
-    if prof_sk and path_sk and prof_sk.profiles.count > 0 and path_sk.sketchCurves.count > 0:
+    prof_sk, owner_comp, profile_err = resolve_sketch_context(
+        params['profile_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    path_sk, path_owner, path_err = resolve_sketch_context(
+        params['path_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if profile_err == "ERR_COMPONENT" or path_err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif prof_sk and path_sk and owner_comp != path_owner:
+        returnValue.append("ERR_OWNER_MISMATCH")
+    elif prof_sk and path_sk and prof_sk.profiles.count > 0 and path_sk.sketchCurves.count > 0:
         prof = prof_sk.profiles.item(0)
-        path = root.features.createPath(path_sk.sketchCurves.item(0))
-        forms = root.features.formFeatures
+        path = owner_comp.features.createPath(path_sk.sketchCurves.item(0))
+        forms = owner_comp.features.formFeatures
         form_feat = forms.addSweep(prof, path, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         returnValue.append(form_feat.bodies.item(0).name)
     else: returnValue.append("ERR_INPUT")
@@ -207,22 +231,31 @@ except Exception as e:
 
 def build_create_form_loft_script() -> str:
     return """try:
-    profiles = []
-    for name in params['sketch_names']:
-        sk = next((s for s in root.sketches if s.name == name), None)
-        if sk and sk.profiles.count > 0:
-            profiles.append(sk.profiles.item(0))
-    
-    if len(profiles) < 2:
-        returnValue.append("ERR_MIN_PROFILES")
+    sketches, owner_comp, err = resolve_multi_sketch_context(
+        params['sketch_names'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif err == "ERR_OWNER_MISMATCH":
+        returnValue.append("ERR_OWNER_MISMATCH")
     else:
-        forms = root.features.formFeatures
-        # createLoftInput might work or we use addLoft
-        f_in = forms.createLoftInput()
-        for p in profiles:
-            f_in.loftSections.add(p)
-        form_feat = forms.add(f_in)
-        returnValue.append(form_feat.bodies.item(0).name)
+        profiles = []
+        for sk in sketches:
+            if sk and sk.profiles.count > 0:
+                profiles.append(sk.profiles.item(0))
+
+        if len(profiles) < 2:
+            returnValue.append("ERR_MIN_PROFILES")
+        else:
+            forms = owner_comp.features.formFeatures
+            # createLoftInput might work or we use addLoft
+            f_in = forms.createLoftInput()
+            for p in profiles:
+                f_in.loftSections.add(p)
+            form_feat = forms.add(f_in)
+            returnValue.append(form_feat.bodies.item(0).name)
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 

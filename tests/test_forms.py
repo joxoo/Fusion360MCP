@@ -19,8 +19,12 @@ from modules.forms import (
     fill_form_hole_logic,
     convert_form_logic
 )
+from core.utils import load_i18n
 
 class TestForms(unittest.TestCase):
+    def setUp(self):
+        load_i18n()
+
     @patch('modules.forms.execute_fusion_script')
     def test_create_form_extrude_params(self, mock_exec):
         mock_exec.return_value = {"status": "success", "data": ["FormBody1"]}
@@ -29,6 +33,21 @@ class TestForms(unittest.TestCase):
         params = mock_exec.call_args[0][1]
         self.assertEqual(params['sketch'], "S1")
         self.assertEqual(params['dist'], 5.0)
+        self.assertIsNone(params['component_name'])
+
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_sweep_component_scope(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["FormBody2"]}
+        res = create_form_sweep_logic("Profile", "Path", "en", component_path="Root/Sub")
+        self.assertEqual(res, "Form sweep created: FormBody2")
+        params = mock_exec.call_args[0][1]
+        self.assertEqual(params['component_path'], "Root/Sub")
+
+    @patch('modules.forms.execute_fusion_script')
+    def test_create_form_loft_owner_mismatch(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_OWNER_MISMATCH"]}
+        res = create_form_loft_logic(["S1", "S2"], "en")
+        self.assertEqual(res, "Entities belong to different components. Cross-component operations are limited.")
 
     @patch('modules.forms.execute_fusion_script')
     def test_set_form_display_mode_params(self, mock_exec):

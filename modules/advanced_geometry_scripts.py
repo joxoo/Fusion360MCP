@@ -1,34 +1,54 @@
 def build_create_loft_script() -> str:
     return """try:
-    profiles = []
-    for name in params['sketch_names']:
-        sk = next((s for s in root.sketches if s.name == name), None)
-        if sk and sk.profiles.count > 0:
-            profiles.append(sk.profiles.item(0))
-    
-    if len(profiles) < 2:
-        returnValue.append("ERR_MIN_PROFILES")
+    sketches, owner_comp, err = resolve_multi_sketch_context(
+        params['sketch_names'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif err == "ERR_OWNER_MISMATCH":
+        returnValue.append("ERR_OWNER_MISMATCH")
     else:
-        lofts = root.features.loftFeatures
-        loft_in = lofts.createInput(adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        for p in profiles:
-            loft_in.loftSections.add(p)
-        loft_feat = lofts.add(loft_in)
-        returnValue.append(loft_feat.bodies.item(0).name)
+        profiles = []
+        for sk in sketches:
+            if sk and sk.profiles.count > 0:
+                profiles.append(sk.profiles.item(0))
+
+        if len(profiles) < 2:
+            returnValue.append("ERR_MIN_PROFILES")
+        else:
+            lofts = owner_comp.features.loftFeatures
+            loft_in = lofts.createInput(adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+            for p in profiles:
+                loft_in.loftSections.add(p)
+            loft_feat = lofts.add(loft_in)
+            returnValue.append(loft_feat.bodies.item(0).name)
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
 
 def build_create_sweep_script() -> str:
     return """try:
-    prof_sk = next((s for s in root.sketches if s.name == params['profile_sketch']), None)
-    path_sk = next((s for s in root.sketches if s.name == params['path_sketch']), None)
-    
-    if prof_sk and path_sk and prof_sk.profiles.count > 0 and path_sk.sketchCurves.count > 0:
+    prof_sk, owner_comp, profile_err = resolve_sketch_context(
+        params['profile_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    path_sk, path_owner, path_err = resolve_sketch_context(
+        params['path_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+
+    if profile_err == "ERR_COMPONENT" or path_err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif prof_sk and path_sk and owner_comp != path_owner:
+        returnValue.append("ERR_OWNER_MISMATCH")
+    elif prof_sk and path_sk and prof_sk.profiles.count > 0 and path_sk.sketchCurves.count > 0:
         prof = prof_sk.profiles.item(0)
-        # Use first curve as path for simplicity
-        path = root.features.createPath(path_sk.sketchCurves.item(0))
-        sweeps = root.features.sweepFeatures
+        path = owner_comp.features.createPath(path_sk.sketchCurves.item(0))
+        sweeps = owner_comp.features.sweepFeatures
         sweep_in = sweeps.createInput(prof, path, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
         sweep_feat = sweeps.add(sweep_in)
         returnValue.append(sweep_feat.bodies.item(0).name)

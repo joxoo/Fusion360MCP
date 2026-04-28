@@ -1,8 +1,12 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from modules.geometry import extrude_sketch_logic
+from core.utils import load_i18n
 
 class TestExtrudeSketch(unittest.TestCase):
+    def setUp(self):
+        load_i18n()
+
     @patch('core.bridge.requests.post')
     def test_extrude_sketch_all_profiles(self, mock_post):
         """Verify that by default all profiles are extruded."""
@@ -77,6 +81,16 @@ class TestExtrudeSketch(unittest.TestCase):
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['offset'], 0.3)
 
+    @patch('core.bridge.requests.post')
+    def test_extrude_sketch_owner_mismatch_error(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["ERR_OWNER_MISMATCH"]}
+        mock_post.return_value = mock_response
+
+        res = extrude_sketch_logic("MySketch", 1.0, "en", op="Cut", target_body="OtherBody")
+        self.assertEqual(res, "Entities belong to different components. Cross-component operations are limited.")
+
 class TestExtrudeSketchScript(unittest.TestCase):
     def test_extrude_sketch_script_content(self):
         """Verify the script builder includes logic for profile selection, operations, and offset."""
@@ -87,7 +101,10 @@ class TestExtrudeSketchScript(unittest.TestCase):
         self.assertIn("op_str = params.get('op', 'NewBody')", script)
         self.assertIn("offset_val = params.get('offset', 0)", script)
         self.assertIn("adsk.fusion.OffsetStartDefinition.create", script)
+        self.assertIn("resolve_sketch_context(", script)
+        self.assertIn("owner_comp.features.extrudeFeatures", script)
         self.assertIn("ext_in.participantBodies = [target_body]", script)
+        self.assertIn("ERR_OWNER_MISMATCH", script)
         self.assertIn("adsk.core.ObjectCollection.create()", script)
         self.assertIn("adsk.fusion.FeatureOperations.CutFeatureOperation", script)
         self.assertIn("adsk.fusion.FeatureOperations.JoinFeatureOperation", script)

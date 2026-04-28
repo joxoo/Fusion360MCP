@@ -12,13 +12,25 @@ def execute_fusion_script(script: str, params: dict = None, use_common: list = N
     """
     Executes Python code in Fusion 360.
     Optionally prepends common utility script fragments.
+    Always includes standard setup and core resolvers by default.
     """
-    full_script = COMMON_FUSION_SCRIPTS["setup_standard"]
+    # Base fragments that should be available everywhere
+    base_keys = ["setup_standard", "find_body", "find_comp", "placement"]
+    
+    # Track which keys we already added to avoid duplicates
+    added_keys = set()
+    full_script = ""
+
+    for key in base_keys:
+        if key in COMMON_FUSION_SCRIPTS:
+            full_script += COMMON_FUSION_SCRIPTS[key]
+            added_keys.add(key)
     
     if use_common:
         for key in use_common:
-            if key in COMMON_FUSION_SCRIPTS:
+            if key in COMMON_FUSION_SCRIPTS and key not in added_keys:
                 full_script += COMMON_FUSION_SCRIPTS[key]
+                added_keys.add(key)
     
     full_script += "\n" + script
 

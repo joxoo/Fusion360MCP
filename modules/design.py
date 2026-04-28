@@ -1,5 +1,11 @@
 from core.bridge import execute_fusion_script, FusionBridgeError
 from core.utils import format_response, register_tool
+from core.error_handler import (
+    bridge_error_message,
+    get_result_value,
+    map_result_error,
+    localized_error,
+)
 from modules.design_scripts import (
     build_cleanup_design_script,
     build_create_new_design_script,
@@ -10,18 +16,18 @@ def cleanup_design_logic(lang: str = "en"):
     """Unifies cleanup logic for both DE and EN."""
     try:
         res = execute_fusion_script(build_cleanup_design_script())
-        val = res.get("data", ["Error"])[0]
+        val = get_result_value(res, "Error")
         if val == "OK":
             return format_response(lang, "design_cleaned")
         return val
-    except FusionBridgeError as e: return f"Error: {str(e)}"
+    except FusionBridgeError as e: return bridge_error_message(e)
 
 def restart_mcp_logic(lang: str = "en"):
     """Manually restarts the MCP server subprocess."""
     try:
         execute_fusion_script(build_restart_mcp_script())
         return format_response(lang, "mcp_restart_sent")
-    except FusionBridgeError as e: return f"Error: {str(e)}"
+    except FusionBridgeError as e: return bridge_error_message(e)
 
 def create_new_design_logic(lang: str = "en"):
     """Creates a new empty Fusion 360 document."""
@@ -29,7 +35,7 @@ def create_new_design_logic(lang: str = "en"):
         if execute_fusion_script(build_create_new_design_script()):
             return format_response(lang, "document_created")
         return "Error creating document."
-    except FusionBridgeError as e: return f"Error: {str(e)}"
+    except FusionBridgeError as e: return bridge_error_message(e)
 
 def change_design_mode_logic(mode: str = "Assembly", lang: str = "en"):
     """Switch mode between 'Part' and 'Assembly'."""
@@ -42,7 +48,7 @@ def direct_api_access_logic(script: str, lang: str = "en"):
         data = res.get("data") or []
         return "\n".join(str(item) for item in data) if data else "OK"
     except FusionBridgeError as e:
-        return f"Error: {str(e)}"
+        return bridge_error_message(e)
 
 _mcp_instance = None
 

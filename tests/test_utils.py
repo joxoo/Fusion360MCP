@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from core.utils import format_response, register_tool, load_i18n
+from core.error_handler import get_result_value, localized_error, map_result_error
 import inspect
 from modules.sketch import draw_slot_logic, create_sketch_circular_pattern_logic, create_sketch_rectangular_pattern_logic, create_sketch_offset_logic
 
@@ -155,6 +156,20 @@ class TestUtils(unittest.TestCase):
         self.assertIn("constraints = s.geometricConstraints", script)
         self.assertIn("constraints.createRectangularPatternInput(entities,", script)
         self.assertIn("constraints.addRectangularPattern(pattern_input)", script)
+
+    def test_error_handler_reads_result_value(self):
+        self.assertEqual(get_result_value({"data": ["OK"]}), "OK")
+        self.assertEqual(get_result_value({}, "fallback"), "fallback")
+
+    def test_error_handler_maps_localized_error(self):
+        res = map_result_error("ERR_COMPONENT", "en", {
+            "ERR_COMPONENT": localized_error("component_not_found")
+        })
+        self.assertEqual(res, "Component not found.")
+
+    def test_error_handler_passthroughs_unknown_err_codes(self):
+        res = map_result_error("ERR_SOMETHING", "en", {})
+        self.assertEqual(res, "ERR_SOMETHING")
 
 if __name__ == '__main__':
     unittest.main()

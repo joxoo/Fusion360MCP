@@ -49,7 +49,7 @@ except Exception as e:
 
 def build_create_revolve_script() -> str:
     return """try:
-    s = next((sk for sk in active_comp.sketches if sk.name == params['sketch']), None)
+    s = find_sketch_recursive(root, params['sketch'])
     axis_entity = {"X": active_comp.xConstructionAxis, "Y": active_comp.yConstructionAxis, "Z": active_comp.zConstructionAxis}.get(params['axis'], active_comp.zConstructionAxis)
     if s and s.profiles.count > 0:
         prof = s.profiles.item(0)
@@ -86,27 +86,27 @@ except Exception as e:
 
 def build_create_sweep_script() -> str:
     return """try:
-    # Find profile
-    prof = None
-    for sk in active_comp.sketches:
-        if sk.name == params['profile_sketch'] and sk.profiles.count > 0:
-            prof = sk.profiles.item(0)
-            break
-            
-    # Find path
-    path_sk = None
-    for sk in active_comp.sketches:
-        if sk.name == params['path_sketch'] and sk.sketchCurves.count > 0:
-            path_sk = sk
-            break
-    
-    path = path_sk.sketchCurves.item(0) if path_sk else None
-    
-    if prof and path_sk and path_sk.sketchCurves.count > 0:
-        sweeps = active_comp.features.sweepFeatures
-        # Erstelle ein echtes Path-Objekt aus der ersten Kurve der Skizze
-        path = active_comp.features.createPath(path_sk.sketchCurves.item(0))
-        s_in = sweeps.createInput(prof, path, adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    profile_sk, owner_comp, profile_err = resolve_sketch_context(
+        params['profile_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    path_sk, path_owner, path_err = resolve_sketch_context(
+        params['path_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+
+    if profile_err == "ERR_COMPONENT" or path_err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif profile_sk and path_sk and owner_comp != path_owner:
+        returnValue.append("ERR_OWNER_MISMATCH")
+    elif profile_sk and path_sk and profile_sk.profiles.count > 0 and path_sk.sketchCurves.count > 0:
+        prof = profile_sk.profiles.item(0)
+        sweeps = owner_comp.features.sweepFeatures
+        path = owner_comp.features.createPath(path_sk.sketchCurves.item(0))
+        rev_op = adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+        s_in = sweeps.createInput(prof, path, rev_op)
         if params.get('twist', 0) != 0:
             s_in.twistAngle = adsk.core.ValueInput.createByString(f"{params['twist']} deg")
         s_feat = sweeps.add(s_in)
@@ -210,7 +210,7 @@ except Exception as e:
 def build_create_pattern_on_path_script() -> str:
     return """try:
     target = find_body_recursive(root, params['body'])
-    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
+    path_sk = find_sketch_recursive(root, params['path_sketch'])
     
     if target and path_sk and path_sk.sketchCurves.count > 0:
         ents = adsk.core.ObjectCollection.create()
@@ -312,14 +312,30 @@ except Exception as e:
 
 def build_combine_bodies_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['target'])
+    target, owner_comp, target_err = resolve_body_context(
+        params['target'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
     tools = adsk.core.ObjectCollection.create()
+    owner_mismatch = False
     for name in params['tool_bodies']:
-        t = find_body_recursive(root, name)
-        if t: tools.add(t)
-    
-    if target and tools.count > 0:
-        combines = target.parentComponent.features.combineFeatures
+        t, tool_owner, tool_err = resolve_body_context(
+            name,
+            params.get('component_name'),
+            params.get('component_path')
+        )
+        if t and tool_owner == owner_comp:
+            tools.add(t)
+        elif t:
+            owner_mismatch = True
+
+    if target_err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif owner_mismatch:
+        returnValue.append("ERR_OWNER_MISMATCH")
+    elif target and tools.count > 0:
+        combines = owner_comp.features.combineFeatures
         c_in = combines.createInput(target, tools)
         op = params.get('operation', 'Join').lower()
         if op == 'cut': c_in.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
@@ -383,11 +399,17 @@ except Exception as e:
 
 def build_split_body_script() -> str:
     return """try:
-    target = find_body_recursive(root, params['body'])
-    if not target:
+    target, owner_comp, target_err = resolve_body_context(
+        params['body'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if target_err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif not target:
         returnValue.append("ERR_BODY")
     else:
-        owner = active_comp
+        owner = owner_comp
         tool_name = str(params.get('tool', '')).strip().upper()
         tool = {
             "XY": owner.xYConstructionPlane,
@@ -395,9 +417,18 @@ def build_split_body_script() -> str:
             "YZ": owner.yZConstructionPlane
         }.get(tool_name)
         if not tool:
-            tool = find_body_recursive(root, params['tool'])
+            tool, tool_owner, tool_err = resolve_body_context(
+                params['tool'],
+                params.get('component_name'),
+                params.get('component_path')
+            )
+            if tool and tool_owner != owner:
+                returnValue.append("ERR_OWNER_MISMATCH")
+                tool = None
 
-        if target and tool:
+        if len(returnValue) > 0:
+            pass
+        elif target and tool:
             splits = owner.features.splitBodyFeatures
             s_in = splits.createInput(target, tool, True)
             splits.add(s_in)
@@ -451,7 +482,7 @@ except Exception as e:
 
 def build_create_plastic_rib_script() -> str:
     return """try:
-    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
+    path_sk = find_sketch_recursive(root, params['path_sketch'])
     if path_sk and path_sk.sketchCurves.count > 0:
         line = path_sk.sketchCurves.item(0)
         ribs = active_comp.features.ribFeatures
@@ -467,10 +498,11 @@ except Exception as e:
 
 def build_create_plastic_web_script() -> str:
     return """try:
-    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
+    path_sk = find_sketch_recursive(root, params['path_sketch'])
     if path_sk and path_sk.sketchCurves.count > 0:
         curves = adsk.core.ObjectCollection.create()
-        for c in path_sk.sketchCurves: curves.add(c)
+        for i in range(path_sk.sketchCurves.count):
+            curves.add(path_sk.sketchCurves.item(i))
         webs = active_comp.features.webFeatures
         w_in = webs.createInput(curves, True)
         w_in.thickness = adsk.core.ValueInput.createByReal(params['thick'])
@@ -653,7 +685,7 @@ except Exception as e:
 
 def build_create_pipe_script() -> str:
     return """try:
-    path_sk = next((s for s in active_comp.sketches if s.name == params['path_sketch']), None)
+    path_sk = find_sketch_recursive(root, params['path_sketch'])
     if path_sk and path_sk.sketchCurves.count > 0:
         path = active_comp.features.createPath(path_sk.sketchCurves.item(0))
         pipes = active_comp.features.pipeFeatures
@@ -765,8 +797,14 @@ except Exception as e:
 
 def build_extrude_sketch_script() -> str:
     return """try:
-    s = next((sk for sk in active_comp.sketches if sk.name == params['sketch']), None)
-    if not s:
+    s, owner_comp, err = resolve_sketch_context(
+        params['sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif not s:
         returnValue.append("ERR_SKETCH")
     else:
         # Determine which profiles to extrude
@@ -795,7 +833,7 @@ def build_extrude_sketch_script() -> str:
             }
             op = ops.get(op_str, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
             
-            extrudes = active_comp.features.extrudeFeatures
+            extrudes = owner_comp.features.extrudeFeatures
             ext_in = extrudes.createInput(profs, op)
             
             # Support for start offset
@@ -809,23 +847,31 @@ def build_extrude_sketch_script() -> str:
             # Targeted body selection for Cut/Join
             target_body_name = params.get('target_body')
             if target_body_name:
-                target_body = find_body_recursive(root, target_body_name)
-                if target_body:
+                target_body, target_owner, target_err = resolve_body_context(
+                    target_body_name,
+                    params.get('component_name'),
+                    params.get('component_path')
+                )
+                if target_err == "ERR_COMPONENT":
+                    returnValue.append("ERR_COMPONENT")
+                elif target_body and target_owner == owner_comp:
                     ext_in.participantBodies = [target_body]
+                elif target_body:
+                    returnValue.append("ERR_OWNER_MISMATCH")
+                else:
+                    returnValue.append("ERR_TARGET_BODY")
             elif op in [adsk.fusion.FeatureOperations.CutFeatureOperation, adsk.fusion.FeatureOperations.JoinFeatureOperation]:
-                # Fallback: Include all bodies in the active component to ensure the operation has targets
-                all_bodies = []
-                for b in active_comp.bRepBodies:
-                    all_bodies.append(b)
+                # Fallback: Include all bodies in the sketch owner component.
+                all_bodies = collect_component_bodies(owner_comp)
                 if all_bodies:
                     ext_in.participantBodies = all_bodies
-            
-            ext = extrudes.add(ext_in)
-            
-            if ext.bodies.count > 0:
-                returnValue.append(ext.bodies.item(0).name)
-            else:
-                returnValue.append("OK")
+            if len(returnValue) == 0:
+                ext = extrudes.add(ext_in)
+                
+                if ext.bodies.count > 0:
+                    returnValue.append(ext.bodies.item(0).name)
+                else:
+                    returnValue.append("OK")
         else:
             returnValue.append("ERR_NO_PROFILE")
 except Exception as e:

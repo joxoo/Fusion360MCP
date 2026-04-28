@@ -19,7 +19,7 @@ class TestAssembly(unittest.TestCase):
         from modules.assembly_scripts import build_create_component_script
         script = build_create_component_script()
         self.assertIn("occ.activate()", script)
-        self.assertIn("target = active_comp", script)
+        self.assertIn("target = resolve_component_context", script)
 
     @patch('core.bridge.requests.post')
     def test_create_joint_params(self, mock_post):

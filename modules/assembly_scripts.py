@@ -1,11 +1,14 @@
 def build_create_component_script() -> str:
     return """try:
     name = params.get('name', 'New Component')
-    target = active_comp
-    occ = target.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-    occ.component.name = name
-    occ.activate()
-    returnValue.append(occ.component.name)
+    target = resolve_component_context(params.get('component_name'), params.get('component_path'))
+    if target:
+        occ = target.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+        occ.component.name = name
+        occ.activate()
+        returnValue.append(occ.component.name)
+    else:
+        returnValue.append("ERR_COMPONENT")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 

@@ -12,8 +12,12 @@ from modules.surfaces import (
     extend_surface_logic,
     reverse_surface_normal_logic
 )
+from core.utils import load_i18n
 
 class TestSurfaces(unittest.TestCase):
+    def setUp(self):
+        load_i18n()
+
     @patch('modules.surfaces.execute_fusion_script')
     def test_create_surface_patch_params(self, mock_exec):
         mock_exec.return_value = {"status": "success", "data": ["Patch1"]}
@@ -53,10 +57,25 @@ class TestSurfaces(unittest.TestCase):
         res = stitch_surfaces_logic(["S1", "S2"], 0.1, "en")
         self.assertIn("Surfaces stitched successfully", res)
 
+    @patch('modules.surfaces.execute_fusion_script')
+    def test_trim_surface_owner_mismatch(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["ERR_OWNER_MISMATCH"]}
+        res = trim_surface_logic("Body1", "ToolSketch", "en")
+        self.assertEqual(res, "Entities belong to different components. Cross-component operations are limited.")
+
+    @patch('modules.surfaces.execute_fusion_script')
+    def test_surface_patch_component_scope(self, mock_exec):
+        mock_exec.return_value = {"status": "success", "data": ["Patch1"]}
+        res = create_surface_patch_logic("S1", "en", component_path="Root/SurfaceComp")
+        self.assertEqual(res, "Surface patch created: Patch1")
+        params = mock_exec.call_args[0][1]
+        self.assertEqual(params['component_path'], "Root/SurfaceComp")
+
 class TestSurfaceScripts(unittest.TestCase):
     def test_stitch_script_has_safe_fallback(self):
         from modules.surfaces_scripts import build_stitch_surfaces_script
         script = build_stitch_surfaces_script()
+        self.assertIn("resolve_multi_body_context(", script)
         self.assertIn("first_name", script)
         self.assertIn("stitch_feat.bodies.count > 0", script)
 

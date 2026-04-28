@@ -71,24 +71,30 @@ def normalize_name(name):
 def ascii_fold_name(name):
     return ''.join(ch for ch in unicodedata.normalize('NFKD', normalize_name(name)) if not unicodedata.combining(ch))
 
+def strip_instance_suffix(name):
+    if not name: return ""
+    return str(name).split(":")[0]
+
 def names_match(left, right):
-    norm_left = normalize_name(left)
-    norm_right = normalize_name(right)
+    norm_left = normalize_name(strip_instance_suffix(left))
+    norm_right = normalize_name(strip_instance_suffix(right))
     if norm_left == norm_right:
         return True
-    return ascii_fold_name(left) == ascii_fold_name(right)
+    return ascii_fold_name(strip_instance_suffix(left)) == ascii_fold_name(strip_instance_suffix(right))
 
 def find_body_recursive(component, target_name):
+    if not target_name: return None
     for b in component.bRepBodies:
-        if not target_name or names_match(b.name, target_name): return b
+        if names_match(b.name, target_name): return b
     for occ in component.occurrences:
         res = find_body_recursive(occ.component, target_name)
         if res: return res
     return None
 
 def find_sketch_recursive(component, target_name):
+    if not target_name: return None
     for s in component.sketches:
-        if not target_name or names_match(s.name, target_name): return s
+        if names_match(s.name, target_name): return s
     for occ in component.occurrences:
         res = find_sketch_recursive(occ.component, target_name)
         if res: return res
@@ -110,6 +116,175 @@ def find_tspline_body_recursive(component, target_name):
         res = find_tspline_body_recursive(occ.component, target_name)
         if res: return res
     return None
+
+def get_owner_component(entity):
+    owner = getattr(entity, 'parentComponent', None)
+    return owner if owner else root
+
+def get_component_name(component):
+    if component == root:
+        return "Root"
+    return getattr(component, 'name', 'Root')
+
+def get_component_path(component):
+    if component == root:
+        return "Root"
+    for occ in root.allOccurrences:
+        if occ.component == component:
+            path = occ.fullPathName or occ.name
+            return f"Root/{path}" if not str(path).startswith("Root/") else path
+    return get_component_name(component)
+
+def find_component_by_name_recursive(component, target_name):
+    if not target_name:
+        return component
+    if names_match(get_component_name(component), target_name):
+        return component
+    for occ in component.occurrences:
+        res = find_component_by_name_recursive(occ.component, target_name)
+        if res:
+            return res
+    return None
+
+def find_component_by_path(root_comp, target_path):
+    if not target_path:
+        return root_comp
+    normalized_path = str(target_path).strip().replace("\\\\", "/")
+    if normalized_path in ("Root", "/Root"):
+        return root_comp
+
+    if normalized_path.startswith("Root/"):
+        normalized_path = normalized_path[5:]
+    elif normalized_path.startswith("/Root/"):
+        normalized_path = normalized_path[6:]
+
+    if not normalized_path:
+        return root_comp
+
+    current = root_comp
+    for segment in [part for part in normalized_path.split("/") if part]:
+        match = None
+        for occ in current.occurrences:
+            occ_name = getattr(occ, 'name', '')
+            comp_name = get_component_name(occ.component)
+            if names_match(occ_name, segment) or names_match(comp_name, segment):
+                match = occ.component
+                break
+        if not match:
+            return None
+        current = match
+    return current
+
+def resolve_component_context(component_name=None, component_path=None):
+    if component_path:
+        return find_component_by_path(root, component_path)
+    if component_name:
+        if names_match(component_name, "Root"):
+            return root
+        return find_component_by_name_recursive(root, component_name)
+    return active_comp or root
+
+def resolve_lookup_scope(component_name=None, component_path=None):
+    target_scope = resolve_component_context(component_name, component_path)
+    return target_scope if target_scope else None
+
+def get_component_plane(component, plane_name):
+    plane_key = str(plane_name or "XY").upper()
+    return {
+        "XY": component.xYConstructionPlane,
+        "XZ": component.xZConstructionPlane,
+        "YZ": component.yZConstructionPlane,
+    }.get(plane_key, component.xYConstructionPlane)
+
+def resolve_body_context(target_name, component_name=None, component_path=None):
+    scope = resolve_lookup_scope(component_name, component_path)
+    body = None
+    if scope:
+        body = find_body_recursive(scope, target_name)
+    
+    # Global fallback if not found in specific scope
+    if not body and (component_name or component_path):
+        body = find_body_recursive(root, target_name)
+        
+    if not body:
+        return (None, None, "ERR_BODY_NOT_FOUND")
+        
+    owner = get_owner_component(body)
+    return (body, owner, None)
+
+def resolve_sketch_context(target_name, component_name=None, component_path=None):
+    scope = resolve_lookup_scope(component_name, component_path)
+    sketch = None
+    if scope:
+        sketch = find_sketch_recursive(scope, target_name)
+        
+    # Global fallback
+    if not sketch and (component_name or component_path):
+        sketch = find_sketch_recursive(root, target_name)
+        
+    if not sketch:
+        return (None, None, "ERR_SKETCH_NOT_FOUND")
+        
+    owner = get_owner_component(sketch)
+    return (sketch, owner, None)
+
+def resolve_multi_sketch_context(sketch_names, component_name=None, component_path=None):
+    resolved = []
+    owner_comp = None
+    for sketch_name in sketch_names:
+        sketch, current_owner, err = resolve_sketch_context(sketch_name, component_name, component_path)
+        if err:
+            return (None, None, err)
+        if owner_comp is None:
+            owner_comp = current_owner
+        elif current_owner != owner_comp:
+            return (None, None, "ERR_ENTITY_OWNER_MISMATCH")
+        resolved.append(sketch)
+    return (resolved, owner_comp, None)
+
+def resolve_multi_body_context(body_names, component_name=None, component_path=None):
+    resolved = []
+    owner_comp = None
+    for body_name in body_names:
+        body, current_owner, err = resolve_body_context(body_name, component_name, component_path)
+        if err:
+            return (None, None, err)
+        if owner_comp is None:
+            owner_comp = current_owner
+        elif current_owner != owner_comp:
+            return (None, None, "ERR_ENTITY_OWNER_MISMATCH")
+        resolved.append(body)
+    return (resolved, owner_comp, None)
+
+def get_default_target_component(params=None):
+    params = params or {}
+    target_comp = resolve_component_context(params.get('component_name'), params.get('component_path'))
+    return target_comp if target_comp else None
+
+def collect_component_bodies(component):
+    bodies = []
+    for i in range(component.bRepBodies.count):
+        bodies.append(component.bRepBodies.item(i))
+    return bodies
+
+def resolve_sketch_creation_context(params):
+    component_name = params.get('component_name')
+    component_path = params.get('component_path')
+    body_name = params.get('body')
+    face_idx = params.get('face_index')
+
+    if body_name is not None:
+        target_body, owner_comp, err = resolve_body_context(body_name, component_name, component_path)
+        if err:
+            return (None, None, err)
+        if face_idx is None or face_idx < 0 or face_idx >= target_body.faces.count:
+            return (None, None, "ERR_FACE_INDEX")
+        return (owner_comp, target_body.faces.item(face_idx), None)
+
+    target_comp = resolve_component_context(component_name, component_path)
+    if not target_comp:
+        return (None, None, "ERR_COMPONENT_NOT_FOUND")
+    return (target_comp, get_component_plane(target_comp, params.get('plane')), None)
 """,
     "find_comp": """
 def find_comp_recursive(root_comp, target_name):
@@ -122,7 +297,9 @@ def find_comp_recursive(root_comp, target_name):
 def get_offset_plane(base_plane, offset):
     if abs(offset) <= 1e-9:
         return base_plane
-    planes = root.constructionPlanes
+    # Create offset plane in the same component as the base plane
+    owner = base_plane.parentComponent if hasattr(base_plane, 'parentComponent') else root
+    planes = owner.constructionPlanes
     plane_input = planes.createInput()
     plane_input.setByOffset(base_plane, adsk.core.ValueInput.createByReal(offset))
     return planes.add(plane_input)
@@ -132,7 +309,8 @@ def translate_body(body, x=0.0, y=0.0, z=0.0):
         return body
     entities = adsk.core.ObjectCollection.create()
     entities.add(body)
-    move_feats = root.features.moveFeatures
+    # Use the component that owns the body, not necessarily root
+    move_feats = body.parentComponent.features.moveFeatures
     move_input = move_feats.createInput2(entities)
     move_input.defineAsTranslateXYZ(
         adsk.core.ValueInput.createByReal(x),
@@ -157,16 +335,17 @@ _I18N_DATA = None
 
 def load_i18n(file_path=None):
     global _I18N_DATA
-    if _I18N_DATA is not None:
+    if _I18N_DATA is not None and file_path is None:
         return _I18N_DATA
     if file_path is None:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        file_path = os.path.join(base_dir, "i18n.json")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(os.path.dirname(current_dir), "i18n.json")
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             _I18N_DATA = json.load(f)
             return _I18N_DATA
-    except Exception:
+    except Exception as e:
+        print(f"Error loading i18n from {file_path}: {e}")
         _I18N_DATA = {"de": {}, "en": {}}
         return _I18N_DATA
 

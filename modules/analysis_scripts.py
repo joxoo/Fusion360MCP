@@ -206,3 +206,25 @@ try:
     returnValue.append(json.dumps(results))
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_get_assembly_tree_script() -> str:
+    return """import json
+def get_comp_info(comp, path):
+    info = {
+        "name": comp.name,
+        "path": path,
+        "bodies": [b.name for b in comp.bRepBodies],
+        "sketches": [s.name for s in comp.sketches],
+        "components": []
+    }
+    for occ in comp.occurrences:
+        child_path = f"{path}/{occ.name}"
+        info["components"].append(get_comp_info(occ.component, child_path))
+    return info
+
+try:
+    tree = get_comp_info(root, "Root")
+    returnValue.append(json.dumps(tree))
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
