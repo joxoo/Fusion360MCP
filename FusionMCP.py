@@ -120,7 +120,7 @@ class BridgeHttpHandler(BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers['Content-Length'])
             data = json.loads(self.rfile.read(content_length).decode('utf-8'))
-            
+
             completion_event.clear()
             task_queue.put(data)
             app.fireCustomEvent(EVENT_ID, "run")
@@ -142,10 +142,20 @@ class BridgeHttpHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(BridgeResponse.error(str(e))).encode('utf-8'))
 
+class BridgeServer(HTTPServer):
+    allow_reuse_address = True
+
 def run_server():
     global http_server, bridge_host, bridge_port
     try:
-        http_server = HTTPServer((bridge_host, bridge_port), BridgeHttpHandler)
+        # Try to clean up previous instance if it exists in this session
+        if http_server:
+            try:
+                http_server.shutdown()
+                http_server.server_close()
+            except: pass
+            
+        http_server = BridgeServer((bridge_host, bridge_port), BridgeHttpHandler)
         http_server.serve_forever()
     except Exception as e:
         app.log(f"Bridge Server Error: {str(e)}")
@@ -154,9 +164,19 @@ def restart_bridge():
     global http_server
     try:
         if http_server:
-            threading.Thread(target=http_server.shutdown).start()
-        threading.Thread(target=run_server, daemon=True).start()
-        add_to_log(f"Bridge restarted on {bridge_host}:{bridge_port}")
+            # Shutdown synchronously in a thread, then close
+            def shutdown_and_restart():
+                try:
+                    http_server.shutdown()
+                    http_server.server_close()
+                except: pass
+                threading.Thread(target=run_server, daemon=True).start()
+            
+            threading.Thread(target=shutdown_and_restart, daemon=True).start()
+        else:
+            threading.Thread(target=run_server, daemon=True).start()
+            
+        add_to_log(f"Bridge restart requested on {bridge_host}:{bridge_port}")
     except:
         app.log("Failed to restart bridge:\n" + traceback.format_exc())
 
@@ -174,12 +194,30 @@ def find_uv():
         if os.path.exists(path): return path
     return None
 
+def cleanup_mcp_port():
+    global mcp_port
+    try:
+        if os.name == 'nt':
+            # Windows: Find PID on port and kill it
+            cmd = f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :{mcp_port}\') do taskkill /f /pid %a'
+            subprocess.run(cmd, shell=True, check=False, capture_output=True)
+        else:
+            # Unix: Find PID on port and kill it
+            cmd = f'lsof -t -i:{mcp_port} | xargs kill -9'
+            subprocess.run(cmd, shell=True, check=False, capture_output=True)
+        add_to_log(f"Cleaned up port {mcp_port}")
+    except: pass
+
 def start_mcp_server():
     global mcp_process, mcp_host, mcp_port
     try:
         addon_dir = os.path.dirname(__file__)
         log_file = os.path.join(addon_dir, 'mcp_error.log')
-        if mcp_process: stop_mcp_process()
+        
+        # Always try to cleanup the port before starting
+        stop_mcp_process()
+        cleanup_mcp_port()
+        
         server_script = os.path.join(addon_dir, 'fusion_mcp_server.py')
         req_file = os.path.join(addon_dir, 'requirements.txt')
         uv_path = find_uv()
@@ -316,7 +354,10 @@ def run(context):
         tools_tab = ui.allToolbarTabs.itemById(TAB_ID)
         if tools_tab:
             panel = tools_tab.toolbarPanels.itemById(PANEL_ID)
-            if panel: panel.controls.addCommand(cmd_def)
+            if panel:
+                ctrl = panel.controls.itemById(CMD_ID)
+                if not ctrl:
+                    panel.controls.addCommand(cmd_def)
         
         add_to_log(f'FusionMCP Bridge started on {bridge_host}:{bridge_port}')
         start_mcp_server()
@@ -326,8 +367,17 @@ def run(context):
 def stop(context):
     global custom_event, http_server
     try:
-        if http_server: threading.Thread(target=http_server.shutdown).start()
+        if http_server:
+            # Create a thread to shut down and close to avoid blocking the UI thread
+            def shutdown_and_close():
+                try:
+                    http_server.shutdown()
+                    http_server.server_close()
+                except: pass
+            threading.Thread(target=shutdown_and_close).start()
+            
         stop_mcp_process()
+        cleanup_mcp_port() # Also cleanup port on stop
         if custom_event: app.unregisterCustomEvent(EVENT_ID)
         cmd_def = ui.commandDefinitions.itemById(CMD_ID)
         if cmd_def: cmd_def.deleteMe()
