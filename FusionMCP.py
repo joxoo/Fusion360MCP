@@ -18,6 +18,48 @@ if ADDON_DIR not in sys.path:
 
 from core.direct_api_utils import should_auto_invoke_run
 
+try:
+    from core.direct_api_utils import (
+        ApplicationProxy,
+        ScriptDialogError,
+        UiMessageBoxProxy,
+        patch_application_get,
+    )
+except ImportError:
+    class ScriptDialogError(RuntimeError):
+        """Raised when a script tries to open a UI dialog during MCP execution."""
+
+    class UiMessageBoxProxy:
+        """Delegates all UI access except modal dialogs, which are converted to errors."""
+
+        def __init__(self, ui):
+            self._ui = ui
+
+        def messageBox(self, text, *args, **kwargs):
+            raise ScriptDialogError(str(text))
+
+        def __getattr__(self, name):
+            return getattr(self._ui, name)
+
+    class ApplicationProxy:
+        def __init__(self, app, ui_proxy):
+            self._app = app
+            self.userInterface = ui_proxy
+
+        def __getattr__(self, name):
+            return getattr(self._app, name)
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def patch_application_get(adsk_module, app_proxy):
+        original_get = adsk_module.core.Application.get
+        adsk_module.core.Application.get = staticmethod(lambda: app_proxy)
+        try:
+            yield
+        finally:
+            adsk_module.core.Application.get = original_get
+
 # --- CONFIGURATION ---
 EVENT_ID = 'FusionMCP_Bridge_v9'
 CMD_ID = 'FusionMCP_UI_Command'
@@ -78,8 +120,11 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                 log_msg = f"Executing: {script[:50]}..." if len(script) > 50 else f"Executing: {script}"
                 add_to_log(log_msg)
                 
+                proxied_ui = UiMessageBoxProxy(ui)
+                proxied_app = ApplicationProxy(app, proxied_ui)
+
                 exec_globals = {
-                    'app': app, 'ui': ui, 'adsk': adsk, 
+                    'app': proxied_app, 'ui': proxied_ui, 'adsk': adsk,
                     'traceback': traceback, 'returnValue': [],
                     'params': params,
                     'start_mcp_server': start_mcp_server,
@@ -90,13 +135,14 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                     # Redirect stdout to capture print() statements
                     f = io.StringIO()
                     with contextlib.redirect_stdout(f):
-                        exec(script, exec_globals)
-                        auto_invoked_run = False
-                        if should_auto_invoke_run(script):
-                            run_fn = exec_globals.get('run')
-                            if callable(run_fn):
-                                run_fn(None)
-                                auto_invoked_run = True
+                        with patch_application_get(adsk, proxied_app):
+                            exec(script, exec_globals)
+                            auto_invoked_run = False
+                            if should_auto_invoke_run(script):
+                                run_fn = exec_globals.get('run')
+                                if callable(run_fn):
+                                    run_fn(None)
+                                    auto_invoked_run = True
                     
                     # Add captured stdout to returnValue if it's not empty
                     stdout_content = f.getvalue().strip()
@@ -116,6 +162,11 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                         "detail": detail
                     }
                     add_to_log("Result: Success")
+                except ScriptDialogError as e:
+                    err_msg = f"Script requested dialog output during MCP execution: {str(e)}"
+                    app.log(f"Script Dialog Intercepted: {err_msg}")
+                    last_result = {"status": "error", "data": None, "error": err_msg, "detail": None}
+                    add_to_log(f"Result: Error - {err_msg}")
                 except Exception as e:
                     err_msg = traceback.format_exc()
                     app.log(f"Script Error: {err_msg}")

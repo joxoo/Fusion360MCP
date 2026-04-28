@@ -12,6 +12,24 @@ from modules.design_scripts import (
     build_restart_mcp_script,
 )
 
+
+def _reject_blocking_dialog_calls(script: str) -> str | None:
+    blocked_markers = (
+        "messageBox(",
+        ".messageBox(",
+        "inputBox(",
+        ".inputBox(",
+        "createFileDialog(",
+        ".createFileDialog(",
+    )
+    if any(marker in script for marker in blocked_markers):
+        return (
+            "Error: direct_api_access scripts must not open Fusion UI dialogs "
+            "(messageBox, inputBox, createFileDialog). Return data via returnValue "
+            "or print() instead."
+        )
+    return None
+
 def cleanup_design_logic(lang: str = "en"):
     """Unifies cleanup logic for both DE and EN."""
     try:
@@ -43,6 +61,9 @@ def change_design_mode_logic(mode: str = "Assembly", lang: str = "en"):
 
 def direct_api_access_logic(script: str, lang: str = "en"):
     """Executes raw Python code directly in Fusion 360."""
+    blocked_error = _reject_blocking_dialog_calls(script)
+    if blocked_error:
+        return blocked_error
     try:
         res = execute_fusion_script(script)
         data = res.get("data") or []

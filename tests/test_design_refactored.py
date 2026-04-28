@@ -38,6 +38,18 @@ class TestDesignRefactored(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(res, "Auto-invoked run(context=None).")
 
+    @patch('modules.design.execute_fusion_script')
+    def test_direct_api_access_rejects_blocking_dialog_calls_before_bridge(self, mock_exec):
+        script = """
+app = adsk.core.Application.get()
+ui = app.userInterface
+ui.messageBox("Failed")
+"""
+        res = direct_api_access_logic(script, "en")
+
+        self.assertIn("must not open Fusion UI dialogs", res)
+        mock_exec.assert_not_called()
+
     @patch('core.bridge.requests.post')
     def test_cleanup_design_uses_builder(self, mock_post):
         mock_response = MagicMock()
