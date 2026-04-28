@@ -12,6 +12,12 @@ import contextlib
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
+if ADDON_DIR not in sys.path:
+    sys.path.insert(0, ADDON_DIR)
+
+from core.direct_api_utils import should_auto_invoke_run
+
 # --- CONFIGURATION ---
 EVENT_ID = 'FusionMCP_Bridge_v9'
 CMD_ID = 'FusionMCP_UI_Command'
@@ -23,7 +29,7 @@ app = adsk.core.Application.get()
 ui = app.userInterface
 task_queue = queue.Queue()
 completion_event = threading.Event()
-last_result = {"status": "idle", "data": None, "error": None}
+last_result = {"status": "idle", "data": None, "error": None, "detail": None}
 custom_event = None
 event_handler = None
 http_server = None
@@ -85,18 +91,35 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                     f = io.StringIO()
                     with contextlib.redirect_stdout(f):
                         exec(script, exec_globals)
+                        auto_invoked_run = False
+                        if should_auto_invoke_run(script):
+                            run_fn = exec_globals.get('run')
+                            if callable(run_fn):
+                                run_fn(None)
+                                auto_invoked_run = True
                     
                     # Add captured stdout to returnValue if it's not empty
                     stdout_content = f.getvalue().strip()
                     if stdout_content:
                         exec_globals['returnValue'].append(stdout_content)
-                        
-                    last_result = {"status": "success", "data": exec_globals['returnValue'], "error": None}
+
+                    detail = None
+                    if auto_invoked_run:
+                        detail = "Auto-invoked run(context=None)."
+                    elif not exec_globals['returnValue']:
+                        detail = "Script executed successfully but produced no output."
+
+                    last_result = {
+                        "status": "success",
+                        "data": exec_globals['returnValue'],
+                        "error": None,
+                        "detail": detail
+                    }
                     add_to_log("Result: Success")
                 except Exception as e:
-                    err_msg = str(e)
+                    err_msg = traceback.format_exc()
                     app.log(f"Script Error: {err_msg}")
-                    last_result = {"status": "error", "data": None, "error": err_msg}
+                    last_result = {"status": "error", "data": None, "error": err_msg, "detail": None}
                     add_to_log(f"Result: Error - {err_msg}")
                 
                 task_queue.task_done()
@@ -129,7 +152,7 @@ class BridgeHttpHandler(BaseHTTPRequestHandler):
                 res = BridgeResponse.error("Timeout: Fusion 360 UI thread not responding")
             else:
                 if last_result["status"] == "success":
-                    res = BridgeResponse.success(last_result["data"])
+                    res = BridgeResponse.success(last_result["data"], last_result.get("detail"))
                 else:
                     res = BridgeResponse.error(last_result["error"])
 
@@ -154,11 +177,14 @@ def run_server():
                 http_server.shutdown()
                 http_server.server_close()
             except: pass
+            http_server = None
             
         http_server = BridgeServer((bridge_host, bridge_port), BridgeHttpHandler)
+        add_to_log(f"Bridge server listening on {bridge_host}:{bridge_port}")
         http_server.serve_forever()
     except Exception as e:
         app.log(f"Bridge Server Error: {str(e)}")
+        add_to_log(f"Bridge Server Error: {str(e)}")
 
 def restart_bridge():
     global http_server
@@ -166,10 +192,12 @@ def restart_bridge():
         if http_server:
             # Shutdown synchronously in a thread, then close
             def shutdown_and_restart():
+                global http_server
                 try:
                     http_server.shutdown()
                     http_server.server_close()
                 except: pass
+                http_server = None
                 threading.Thread(target=run_server, daemon=True).start()
             
             threading.Thread(target=shutdown_and_restart, daemon=True).start()
@@ -370,10 +398,12 @@ def stop(context):
         if http_server:
             # Create a thread to shut down and close to avoid blocking the UI thread
             def shutdown_and_close():
+                global http_server
                 try:
                     http_server.shutdown()
                     http_server.server_close()
                 except: pass
+                http_server = None
             threading.Thread(target=shutdown_and_close).start()
             
         stop_mcp_process()

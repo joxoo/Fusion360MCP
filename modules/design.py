@@ -46,7 +46,9 @@ def direct_api_access_logic(script: str, lang: str = "en"):
     try:
         res = execute_fusion_script(script)
         data = res.get("data") or []
-        return "\n".join(str(item) for item in data) if data else "OK"
+        if data:
+            return "\n".join(str(item) for item in data)
+        return res.get("detail") or "Script executed successfully with no output."
     except FusionBridgeError as e:
         return bridge_error_message(e)
 

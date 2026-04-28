@@ -24,6 +24,21 @@ class TestDesignRefactored(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res, "Line 1\nLine 2\nResult OK")
 
     @patch('core.bridge.requests.post')
+    def test_direct_api_access_returns_detail_when_no_data(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "status": "success",
+            "data": [],
+            "detail": "Auto-invoked run(context=None)."
+        }
+        mock_post.return_value = mock_response
+
+        res = direct_api_access_logic("def run(context): pass", "en")
+
+        self.assertEqual(res, "Auto-invoked run(context=None).")
+
+    @patch('core.bridge.requests.post')
     def test_cleanup_design_uses_builder(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
