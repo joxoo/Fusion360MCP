@@ -7,6 +7,21 @@ from core.error_handler import (
 from modules.design_scripts import (
     build_manage_design_script,
 )
+import json
+from pathlib import Path
+
+_TOOL_ACTION_GUIDE = None
+
+
+def load_tool_action_guide() -> dict:
+    global _TOOL_ACTION_GUIDE
+    if _TOOL_ACTION_GUIDE is not None:
+        return _TOOL_ACTION_GUIDE
+
+    guide_path = Path(__file__).with_name("tool_action_guides.json")
+    with guide_path.open("r", encoding="utf-8") as handle:
+        _TOOL_ACTION_GUIDE = json.load(handle)
+    return _TOOL_ACTION_GUIDE
 
 def _reject_blocking_dialog_calls(script: str) -> str | None:
     blocked_markers = (
@@ -67,6 +82,19 @@ async def list_mcp_tools_logic(lang: str = "en"):
         report.append(f"- {t.name}: {t.description}")
     return "\n".join(report)
 
+def describe_tool_actions_logic(tool_name: str = "", lang: str = "en"):
+    """
+    Returns action guidance for the compact public API.
+    Use this when the client is unsure which batch action or scope fields to send.
+    """
+    tool_action_guide = load_tool_action_guide()
+    if tool_name:
+        guide = tool_action_guide.get(tool_name)
+        if not guide:
+            return f"Error: No action guide found for tool '{tool_name}'."
+        return json.dumps({tool_name: guide}, indent=2)
+    return json.dumps(tool_action_guide, indent=2)
+
 def register_design_tools(mcp):
     global _mcp_instance
     _mcp_instance = mcp
@@ -74,3 +102,4 @@ def register_design_tools(mcp):
     register_tool(mcp, "manage_design", manage_design_logic)
     register_tool(mcp, "direct_api_access", direct_api_access_logic)
     register_tool(mcp, "list_mcp_tools", list_mcp_tools_logic)
+    register_tool(mcp, "describe_tool_actions", describe_tool_actions_logic)

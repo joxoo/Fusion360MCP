@@ -56,6 +56,7 @@ class TestCreateSketch(unittest.TestCase):
 
     def test_create_sketch_script_verifies_created_sketch(self):
         script = build_create_sketch_script()
+        self.assertIn("activate_component_context(owner_comp)", script)
         self.assertIn("if find_sketch_recursive(root, s.name):", script)
         self.assertIn('returnValue.append("ERR_VERIFICATION_FAILED")', script)
 

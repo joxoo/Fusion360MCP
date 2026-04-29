@@ -135,6 +135,28 @@ def get_component_path(component):
             return f"Root/{path}" if not str(path).startswith("Root/") else path
     return get_component_name(component)
 
+def find_occurrence_for_component(component):
+    if component == root:
+        return None
+    for occ in root.allOccurrences:
+        if occ.component == component:
+            return occ
+    return None
+
+def activate_component_context(component):
+    if not component:
+        return None
+    if component == root:
+        return root
+    occ = find_occurrence_for_component(component)
+    if occ:
+        try:
+            occ.activate()
+        except:
+            pass
+        return occ.component
+    return component
+
 def find_component_by_name_recursive(component, target_name):
     if not target_name:
         return component
@@ -259,7 +281,7 @@ def resolve_multi_body_context(body_names, component_name=None, component_path=N
 def get_default_target_component(params=None):
     params = params or {}
     target_comp = resolve_component_context(params.get('component_name'), params.get('component_path'))
-    return target_comp if target_comp else None
+    return activate_component_context(target_comp) if target_comp else None
 
 def collect_component_bodies(component):
     bodies = []
@@ -284,6 +306,7 @@ def resolve_sketch_creation_context(params):
     target_comp = resolve_component_context(component_name, component_path)
     if not target_comp:
         return (None, None, "ERR_COMPONENT_NOT_FOUND")
+    target_comp = activate_component_context(target_comp)
     return (target_comp, get_component_plane(target_comp, params.get('plane')), None)
 """,
     "find_comp": """

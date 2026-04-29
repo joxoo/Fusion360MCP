@@ -102,6 +102,7 @@ class TestExtrudeSketchScript(unittest.TestCase):
         self.assertIn("offset_val = params.get('offset', 0)", script)
         self.assertIn("adsk.fusion.OffsetStartDefinition.create", script)
         self.assertIn("resolve_sketch_context(", script)
+        self.assertIn("activate_component_context(owner_comp)", script)
         self.assertIn("owner_comp.features.extrudeFeatures", script)
         self.assertIn("ext_in.participantBodies = [target_body]", script)
         self.assertIn("ERR_OWNER_MISMATCH", script)

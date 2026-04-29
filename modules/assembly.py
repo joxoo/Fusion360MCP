@@ -15,17 +15,31 @@ ASSEMBLY_ERROR_MAP = {
     "ERR_COMPONENT": localized_error("component_not_found"),
 }
 
+
+def _handle_assembly_batch_result(val: str, lang: str):
+    parts = [part for part in str(val).split(",") if part]
+    errors = [part for part in parts if ":ERR" in part or "ERR_" in part]
+    if errors:
+        mapped_errors = []
+        for err_part in errors:
+            mapped = map_result_error(err_part, lang, ASSEMBLY_ERROR_MAP)
+            mapped_errors.append(mapped or err_part)
+        return f"Error: Some assembly operations failed: {'; '.join(mapped_errors)}"
+    return None
+
 def edit_assembly_logic(operations: list[dict], lang: str = "en"):
     """
     Executes multiple assembly operations in a single batch.
     Supported actions: create_component, create_joint.
+    Component references should prefer component_path over plain names for nested assemblies.
     Each operation should be a dict with 'action' and required parameters.
     """
     try:
-        res = execute_fusion_script(build_edit_assembly_script(), {"operations": operations}, use_common=["find_comp"])
+        res = execute_fusion_script(build_edit_assembly_script(), {"operations": operations}, use_common=["find_body"])
         val = get_result_value(res)
-        err = map_result_error(val, lang, ASSEMBLY_ERROR_MAP)
-        if err: return err
+        err = _handle_assembly_batch_result(str(val), lang)
+        if err:
+            return err
         return format_response(lang, "assembly_updated")
     except FusionBridgeError as e: return bridge_error_message(e)
 

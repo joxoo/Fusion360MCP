@@ -1,0 +1,185 @@
+{
+  "manage_design": {
+    "when_to_use": "Use for design-level lifecycle tasks, not geometry editing.",
+    "actions": {
+      "cleanup": { "required": [], "example": { "action": "cleanup" } },
+      "create_new": { "required": [], "example": { "action": "create_new" } },
+      "restart_mcp": { "required": [], "example": { "action": "restart_mcp" } }
+    }
+  },
+  "analyze_design": {
+    "when_to_use": "Use before editing when you need assembly structure, validation, or scene context.",
+    "actions": {
+      "get_assembly_tree": { "required": ["action"], "example": { "action": "get_assembly_tree" } },
+      "validate": { "required": ["action"], "example": { "action": "validate" } },
+      "scene_map": { "required": ["action"], "example": { "action": "scene_map" } },
+      "physical_data": { "required": ["action"], "example": { "action": "physical_data" } },
+      "bounding_box": { "required": ["action"], "example": { "action": "bounding_box", "body": "Body1" } }
+    }
+  },
+  "create_sketch": {
+    "when_to_use": "Use to create a new sketch on a plane or on a body face before sketch editing or extrusion.",
+    "rules": [
+      "Prefer component_path for nested assemblies.",
+      "Use body_name plus face_index when the sketch must be attached to an existing face.",
+      "The resolved target component is activated before sketch creation so the sketch lands in the intended assembly context.",
+      "If component_path is omitted for nested assemblies, Fusion may use the currently active component and place the sketch in the wrong location."
+    ],
+    "examples": [
+      { "plane_name": "XY", "name": "BaseSketch", "component_path": "Root/Bracket" },
+      { "name": "FaceSketch", "body_name": "BracketBody", "face_index": 0 }
+    ]
+  },
+  "edit_sketch": {
+    "when_to_use": "Use to modify one existing sketch with multiple 2D operations in a single call.",
+    "actions": {
+      "draw_line": { "required": ["x1", "y1", "x2", "y2"] },
+      "draw_circle": { "required": ["x", "y", "r"] },
+      "draw_rectangle": { "required": ["x1", "y1", "x2", "y2"] },
+      "draw_polygon": { "required": ["cx", "cy", "r", "sides"] },
+      "add_constraint": { "required": ["type"] }
+    },
+    "example": {
+      "sketch_name": "BaseSketch",
+      "operations": [
+        { "action": "draw_rectangle", "x1": 0, "y1": 0, "x2": 4, "y2": 2 },
+        { "action": "draw_circle", "x": 2, "y": 1, "r": 0.3 }
+      ]
+    }
+  },
+  "apply_3d_features": {
+    "when_to_use": "Use for most solid modeling changes after a sketch exists.",
+    "rules": [
+      "Prefer component_path on each operation when working in nested components.",
+      "Use target_body for Join/Cut when the target body is known.",
+      "Component-aware creation actions activate the resolved target component before creating bodies.",
+      "If component_path is omitted for nested assemblies, primitive creation may fall back to the wrong active component."
+    ],
+    "actions": {
+      "extrude": {
+        "required": ["sketch", "dist"],
+        "example": {
+          "action": "extrude",
+          "sketch": "BaseSketch",
+          "dist": 2.0,
+          "op": "NewBody",
+          "component_path": "Root/Bracket"
+        }
+      },
+      "fillet": { "required": ["body", "radius"] },
+      "chamfer": { "required": ["body", "dist"] },
+      "combine": { "required": ["target", "tools", "op"] },
+      "create_box": { "required": ["l", "w", "h", "name"] },
+      "create_cylinder": { "required": ["r", "h", "name"] }
+    }
+  },
+  "edit_assembly": {
+    "when_to_use": "Use for assembly structure and joints.",
+    "rules": [
+      "Prefer component_path over component_name for nested assemblies.",
+      "For joints, prefer component1_path and component2_path.",
+      "Create components first, then use their component paths in later sketch or body creation so activation can target the correct assembly context.",
+      "After create_component, use the returned or expected component path in later calls instead of relying on the currently active component."
+    ],
+    "actions": {
+      "create_component": {
+        "required": ["action", "name"],
+        "example": {
+          "action": "create_component",
+          "name": "Arm",
+          "component_path": "Root/Frame"
+        }
+      },
+      "create_joint": {
+        "required": ["action", "type"],
+        "example": {
+          "action": "create_joint",
+          "component1_path": "Root/Frame/Base",
+          "component2_path": "Root/Frame/Arm",
+          "type": "Rigid"
+        }
+      }
+    }
+  },
+  "edit_surfaces": {
+    "when_to_use": "Use for grouped surface operations instead of direct solid modeling tools.",
+    "rules": [
+      "Prefer component_path when the action references a sketch in a nested component.",
+      "Use body_names for stitch and body for offset or thicken."
+    ],
+    "actions": {
+      "patch": {
+        "required": ["sketch"],
+        "example": {
+          "action": "patch",
+          "sketch": "SurfaceProfile",
+          "component_path": "Root/Fairing"
+        }
+      },
+      "offset": { "required": ["body", "dist"], "example": { "action": "offset", "body": "SurfaceBody1", "dist": 0.2 } },
+      "stitch": { "required": ["body_names"], "example": { "action": "stitch", "body_names": ["SurfA", "SurfB"], "tol": 0.1 } },
+      "thicken": { "required": ["body", "thick"], "example": { "action": "thicken", "body": "SurfaceBody1", "thick": 0.15 } }
+    }
+  },
+  "edit_forms": {
+    "when_to_use": "Use for grouped T-Spline form operations.",
+    "rules": [
+      "Use sketch plus dist for form extrusion.",
+      "Use body for display mode, symmetry, or conversion actions on existing T-Spline bodies."
+    ],
+    "actions": {
+      "extrude": {
+        "required": ["sketch", "dist"],
+        "example": {
+          "action": "extrude",
+          "sketch": "FormSketch",
+          "dist": 1.5,
+          "component_path": "Root/Concept"
+        }
+      },
+      "set_display_mode": { "required": ["body"], "example": { "action": "set_display_mode", "body": "TSplineBody1", "mode": "Smooth" } },
+      "clear_symmetry": { "required": ["body"], "example": { "action": "clear_symmetry", "body": "TSplineBody1" } },
+      "convert": { "required": ["body"], "example": { "action": "convert", "body": "TSplineBody1" } }
+    }
+  },
+  "import_mesh": {
+    "when_to_use": "Use to bring STL or OBJ geometry into the active Fusion design.",
+    "example": { "path": "/absolute/path/model.stl" }
+  },
+  "edit_mesh": {
+    "when_to_use": "Use for grouped mesh repair, smoothing, remesh, or conversion actions.",
+    "rules": [
+      "Each action requires body and the target must already be a mesh body.",
+      "Use density for remesh, smoothing for smooth, repair_type for repair, and conv_type for convert."
+    ],
+    "actions": {
+      "remesh": { "required": ["body"], "example": { "action": "remesh", "body": "MeshBody1", "density": 0.5 } },
+      "smooth": { "required": ["body"], "example": { "action": "smooth", "body": "MeshBody1", "smoothing": 0.5 } },
+      "repair": { "required": ["body"], "example": { "action": "repair", "body": "MeshBody1", "repair_type": "infoTypeDefault" } },
+      "convert": { "required": ["body"], "example": { "action": "convert", "body": "MeshBody1", "conv_type": "infoPrismatic" } }
+    }
+  },
+  "list_parameters": {
+    "when_to_use": "Use before editing parameters when you need current parameter names or values."
+  },
+  "edit_parameters": {
+    "when_to_use": "Use to create, update, or delete user parameters in one call.",
+    "actions": {
+      "set": {
+        "required": ["name", "expr"],
+        "example": {
+          "action": "set",
+          "name": "wall_thickness",
+          "expr": "2 mm",
+          "unit": "mm",
+          "comment": "default wall"
+        }
+      },
+      "delete": { "required": ["name"], "example": { "action": "delete", "name": "legacy_parameter" } }
+    }
+  },
+  "export_model": {
+    "when_to_use": "Use only after the design is in the desired final state.",
+    "example": { "format": "step", "filename": "assembly_export" }
+  }
+}

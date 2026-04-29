@@ -6,19 +6,14 @@ FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It e
 
 - **Bridge Integration**: A Fusion 360 add-in that bridges external requests to the Fusion 360 main UI thread.
 - **MCP Server**: Implements the Model Context Protocol using FastMCP for seamless tool integration.
+- **Compact Public API**: By default, the server exposes a reduced AI-friendly toolset. The full internal toolset can still be enabled explicitly.
 - **Comprehensive Toolset**:
-  - **Design**: General design and project management.
-  - **Geometry**: Creation of primitive shapes (box, bolt) and sketches.
-    - `create_sketch`: Supports creating sketches on planes (XY, XZ, YZ) or directly on body faces (via `body_name` and `face_index`).
-    - `extrude_sketch`: Supports extruding all sketch profiles, including **SketchText**. Includes support for operations (`Join`, `Cut`, `NewBody`, `NewComponent`), start `offset`, and targeted body selection.
-  - **Mechanical**: Specialized tools for holes, grooves, and mechanical features.
-  - **Advanced Geometry**: Loft, sweep, appearance, distance, and center-of-mass tools are exposed again in the MCP server.
-  - **Export**: Unified `export_model` tool for `stl`, `f3d`, and `step`.
-  - **Analysis**: Real-time physical data and body analysis.
-  - **Threads**: Support for standard and custom thread application.
+  - **Compact profile**: `manage_design`, `describe_tool_actions`, `analyze_design`, `list_parameters`, `edit_parameters`, `create_sketch`, `edit_sketch`, `apply_3d_features`, `edit_assembly`, `edit_surfaces`, `edit_forms`, `import_mesh`, `edit_mesh`, `export_model`.
+  - **Full profile**: Adds advanced/internal tools such as direct API access, appearance, measurement, threads, mechanical helpers, and other specialist endpoints.
 
 ## Recent Changes
 
+- Added API profiles: `compact` is now the default public surface, `full` keeps the complete internal toolset.
 - `export_model(format="stl|f3d|step", filename=...)` is now the single exposed export tool.
 - `apply_3d_features` accepts `height` aliases for `Box` and `Cylinder`, and `center` aliases for `Cylinder`.
 - `manage_design(action="restart_mcp")` now performs a real MCP restart instead of reusing the previous healthy process.
@@ -43,10 +38,30 @@ The system operates via two primary components:
 1. **The Bridge (`FusionMCP.py`)**: Runs as a native Fusion 360 add-in. It hosts a local HTTP server (port 8082) to receive commands and uses `CustomEvent` to execute them safely on the UI thread.
 2. **The MCP Server (`fusion_mcp_server.py`)**: A separate process (started automatically by the Bridge via `uv`) that translates MCP tool calls into bridge-compatible requests.
 
+### API Profiles
+
+- `compact` (default): exposes the reduced public API intended for AI clients.
+- `full`: exposes the larger internal/specialist toolset.
+
+You can switch profiles with:
+
+```bash
+python fusion_mcp_server.py --api-profile full
+```
+
+or via:
+
+```bash
+FUSION_MCP_API_PROFILE=full
+```
+
 ## Project Structure
 
 - `FusionMCP.py`: Add-in entry point and command bridge.
 - `fusion_mcp_server.py`: FastMCP server entry point.
 - `modules/`: Contains the modular tool implementations:
   - `design.py`, `geometry.py`, `mechanical.py`, etc.
+- `modules/tool_action_guides.json`: Extracted action guidance used by `describe_tool_actions`.
+- `docs/AI_USAGE.md`: Generated compact public API usage rules for AI clients.
+- `scripts/generate_ai_usage.py`: Regenerates `docs/AI_USAGE.md` from `modules/tool_action_guides.json`.
 - `FusionMCP.manifest`: Autodesk manifest file.

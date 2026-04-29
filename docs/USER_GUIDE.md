@@ -7,51 +7,70 @@ Der Fusion 360 MCP-Server ermöglicht die vollständige Fernsteuerung von Autode
 
 ## 2. Verfügbare Module & Werkzeuge
 
+### 2.0 Öffentliche API-Profile
+
+Standardmäßig läuft FusionMCP mit dem Profil `compact`. Dieses Profil ist absichtlich klein gehalten, damit KI-Clients nicht zwischen zu vielen Spezialwerkzeugen wählen müssen.
+
+**`compact` (Standard)**
+- `manage_design`
+- `describe_tool_actions`
+- `analyze_design`
+- `list_parameters`
+- `edit_parameters`
+- `create_sketch`
+- `edit_sketch`
+- `apply_3d_features`
+- `edit_assembly`
+- `edit_surfaces`
+- `edit_forms`
+- `import_mesh`
+- `edit_mesh`
+- `export_model`
+
+**`full`**
+- Enthält zusätzlich interne und spezialisierte Werkzeuge wie `direct_api_access`, `list_mcp_tools`, Mess-/Appearance-Tools, Gewinde- und Mechanical-Helfer.
+
+Startbeispiele:
+
+```bash
+python fusion_mcp_server.py --api-profile compact
+python fusion_mcp_server.py --api-profile full
+```
+
 ### 2.1 Solid Modeling (Festkörper)
 Basiskonstruktion mit mathematisch präzisen Volumenkörpern.
-*   **Primitives:** `create_box`, `create_cylinder`, `create_sphere`, `create_torus`, `create_coil`.
-*   **Skizzen-basiert:** `extrude_sketch`, `create_revolve`, `create_sweep`, `create_loft`.
-*   **Features:** `create_hole_advanced` (mit Senkungen), `apply_custom_thread`.
+*   **Öffentlich im Profil `compact`:** `create_sketch`, `edit_sketch`, `apply_3d_features`.
+*   **Wichtige Regel:** Spezialoperationen wie Extrude, Fillet, Chamfer oder Combine werden bevorzugt als Actions innerhalb von `apply_3d_features` angesprochen.
 
 ### 2.2 Surface Design (Flächen)
 Erstellung hochkomplexer Freiform-Flächen für aerodynamische Hüllen.
-*   **Erstellung:** `create_surface_patch`, `create_surface_cylinder`, `create_surface_sphere`.
-*   **Modifikation:** `trim_surface`, `extend_surface`, `reverse_surface_normal`.
-*   **Konvertierung:** `stitch_surfaces` (Flächen zu Solid nähen), `thicken_surface`.
+*   **Öffentlich im Profil `compact`:** `edit_surfaces`
+*   **Hinweis:** Einzelfunktionen werden nach außen bewusst gebündelt.
 
 ### 2.3 Form Design (Organische T-Splines)
 Der "Sculpting"-Modus für ergonomische und fließende Designs.
-*   **Primitives:** `create_form_box`, `create_form_sphere`, `create_form_cylinder`.
-*   **Operationen:** `create_form_extrude`, `create_form_revolve`, `create_form_loft`.
-*   **Bearbeitung:** `insert_form_edge`, `subdivide_form_face`, `create_form_crease`.
-*   **Symmetrie:** `create_form_mirror_internal`, `clear_form_symmetry`.
-*   **Utilities:** `set_form_display_mode` (Box/Smooth), `convert_form` (T-Spline zu B-Rep).
+*   **Öffentlich im Profil `compact`:** `edit_forms`
+*   **Hinweis:** Form-Operationen werden gesammelt als Actions innerhalb dieses Werkzeugs ausgeführt.
 
 ### 2.4 Mesh Modeling (Netzkörper)
 Umgang mit STL, OBJ und 3D-Scan-Daten.
-*   **Import/Export:** `import_mesh`, `export_stl`, `export_step`.
-*   **Vorbereitung:** `repair_mesh`, `generate_face_groups`.
-*   **Bearbeitung:** `remesh_body`, `smooth_mesh`, `mesh_plane_cut`.
-*   **Konvertierung:** `convert_mesh` (Mesh zu Solid via Prismatic Conversion).
+*   **Öffentlich im Profil `compact`:** `import_mesh`, `edit_mesh`, `export_model`
+*   **Hinweis:** `export_model` ist das einheitliche Export-Werkzeug für `stl`, `f3d` und `step`.
 
 ### 2.5 Professional Modification (Direct Modeling)
 Bearbeitung von Geometrie direkt auf Flächenebene, ideal für historienlose Modelle.
-*   **Boolean:** `combine_bodies` (Join, Cut, Intersect).
-*   **Manipulation:** `delete_face`, `offset_face`, `move_face`.
-*   **Transformation:** `move_body`, `scale_body`, `split_body`.
-*   **Detail:** `create_fillet`, `create_chamfer`, `create_shell`.
+*   **Öffentlich im Profil `compact`:** über `apply_3d_features`
+*   **Typische Actions:** Combine, Fillet, Chamfer, Shell, direkte Modellieroperationen.
 
 ### 2.6 Assembly & Baugruppen
 Strukturierung von komplexen Projekten aus mehreren Teilen.
-*   **Struktur:** `create_component` (Neue Unterkomponente).
-*   **Verbindung:** `create_joint` (Rigid, Revolute, Slider).
-*   **Prüfung:** `check_interference` (Kollisionsprüfung).
+*   **Öffentlich im Profil `compact`:** `edit_assembly`
+*   **Typische Actions:** `create_component`, `create_joint`
 
 ### 2.7 Analyse & Engineering
 Technische Validierung des Modells.
-*   **Physik:** `get_volumetric_properties` (Masse, Volumen, Trägheit), `get_center_of_mass`.
-*   **Maße:** `get_bounding_box`, `measure_distance`.
-*   **Fertigung:** `create_draft_analysis` (Formschrägen-Prüfung).
+*   **Öffentlich im Profil `compact`:** `analyze_design`
+*   **Typische Actions:** `get_assembly_tree`, `validate`, `scene_map`, `physical_data`, `bounding_box`
 
 ---
 
@@ -62,6 +81,8 @@ Der Server unterstützt komplexe, mehrzeilige Python-Skripte via `direct_api_acc
 
 ### 3.2 Kanonische Schnittstelle
 Alle Werkzeuge und Parameter sind nach internationalem Standard auf **Englisch** benannt (z.B. `create_sketch` statt `skizze_erstellen`). Dies ist die bevorzugte und vollständig dokumentierte Schnittstelle für moderne KI-Clients.
+
+Für KI-Clients ist die **kompakte Außen-API** die kanonische Schnittstelle. Das Profil `full` ist für Debugging, Migration und Spezialfälle gedacht.
 
 ### 3.2.1 Kompatibilitäts-Aliase
 Für ältere Prompts und einfache Smoke-Tests akzeptiert der Server zusätzlich einige bekannte Tool- und Parameter-Aliase, z.B.:

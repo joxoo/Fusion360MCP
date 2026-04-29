@@ -825,6 +825,7 @@ def build_extrude_sketch_script() -> str:
     elif not s:
         returnValue.append("ERR_SKETCH")
     else:
+        owner_comp = activate_component_context(owner_comp)
         # Determine which profiles to extrude
         idx = params.get('profile_index')
         profs = adsk.core.ObjectCollection.create()
@@ -1010,6 +1011,7 @@ try:
             if action == 'extrude':
                 s, owner_comp, err = resolve_sketch_context(op['sketch'], op.get('component_name'), op.get('component_path'))
                 if not s: results.append(f"{action}:ERR_SKETCH"); continue
+                owner_comp = activate_component_context(owner_comp)
                 profs = adsk.core.ObjectCollection.create()
                 idx = op.get('profile_index')
                 if idx is not None and 0 <= idx < s.profiles.count: profs.add(s.profiles.item(idx))
@@ -1061,52 +1063,58 @@ try:
                 results.append(f"{action}:OK")
 
             elif action == 'create_box' or action == 'Box':
+                target_comp = get_default_target_component(op)
+                if not target_comp: results.append(f"{action}:ERR_COMPONENT"); continue
                 pt = adsk.core.Point3D.create(0, 0, 0)
-                s = active_comp.sketches.add(active_comp.xYConstructionPlane)
+                s = target_comp.sketches.add(target_comp.xYConstructionPlane)
                 s.sketchCurves.sketchLines.addTwoPointRectangle(pt, adsk.core.Point3D.create(pt.x + op['l'], pt.y + op['w'], 0))
                 if s.profiles.count > 0:
                     h = float(op.get('height', op.get('h', 0)))
-                    box = active_comp.features.extrudeFeatures.addSimple(s.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
+                    box = target_comp.features.extrudeFeatures.addSimple(s.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
                     body = box.bodies.item(0)
                     translate_body(body, op.get('x', 0), op.get('y', 0), op.get('z', 0))
                     body.name = op.get('name', 'Box')
-                    if find_body_recursive(active_comp, body.name):
+                    if find_body_recursive(target_comp, body.name):
                         results.append(f"{action}:OK:{body.name}")
                     else:
                         results.append(f"{action}:ERR_VERIFICATION_FAILED")
                 else: results.append(f"{action}:ERR_NO_PROFILE")
 
             elif action == 'create_cylinder' or action == 'Cylinder':
+                target_comp = get_default_target_component(op)
+                if not target_comp: results.append(f"{action}:ERR_COMPONENT"); continue
                 center_coords = op.get('center', [0,0,0])
                 center = adsk.core.Point3D.create(op.get('x', center_coords[0]), op.get('y', center_coords[1]), op.get('z', center_coords[2]))
-                sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
+                sk = target_comp.sketches.add(target_comp.xYConstructionPlane)
                 r = float(op.get('radius', op.get('r', 0)))
                 h = float(op.get('height', op.get('h', 0)))
                 sk.sketchCurves.sketchCircles.addByCenterRadius(center, r)
-                ext = active_comp.features.extrudeFeatures.addSimple(sk.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
+                ext = target_comp.features.extrudeFeatures.addSimple(sk.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
                 body = ext.bodies.item(0); body.name = op.get('name', 'Cylinder')
-                if find_body_recursive(active_comp, body.name):
+                if find_body_recursive(target_comp, body.name):
                     results.append(f"{action}:OK:{body.name}")
                 else:
                     results.append(f"{action}:ERR_VERIFICATION_FAILED")
 
             elif action == 'create_sphere' or action == 'Sphere':
+                target_comp = get_default_target_component(op)
+                if not target_comp: results.append(f"{action}:ERR_COMPONENT"); continue
                 center_coords = op.get('center', [0,0,0])
                 center = adsk.core.Point3D.create(op.get('x', center_coords[0]), op.get('y', center_coords[1]), op.get('z', center_coords[2]))
                 r = float(op.get('radius', op.get('r', 0.1)))
-                sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
+                sk = target_comp.sketches.add(target_comp.xYConstructionPlane)
                 startPoint = adsk.core.Point3D.create(center.x, center.y + r, center.z)
                 endPoint = adsk.core.Point3D.create(center.x, center.y - r, center.z)
                 alongArcPoint = adsk.core.Point3D.create(center.x + r, center.y, center.z)
                 sk.sketchCurves.sketchArcs.addByThreePoints(startPoint, alongArcPoint, endPoint)
                 axisLine = sk.sketchCurves.sketchLines.addByTwoPoints(startPoint, endPoint)
                 if sk.profiles.count > 0:
-                    rev_in = active_comp.features.revolveFeatures.createInput(sk.profiles.item(0), axisLine, 3)
+                    rev_in = target_comp.features.revolveFeatures.createInput(sk.profiles.item(0), axisLine, 3)
                     rev_in.isSolid = True
                     rev_in.setAngleExtent(False, adsk.core.ValueInput.createByReal(2 * 3.14159))
-                    rev_feat = active_comp.features.revolveFeatures.add(rev_in)
+                    rev_feat = target_comp.features.revolveFeatures.add(rev_in)
                     body = rev_feat.bodies.item(0); body.name = op.get('name', 'Sphere')
-                    if find_body_recursive(active_comp, body.name):
+                    if find_body_recursive(target_comp, body.name):
                         results.append(f"{action}:OK:{body.name}")
                     else:
                         results.append(f"{action}:ERR_VERIFICATION_FAILED")

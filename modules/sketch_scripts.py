@@ -6,6 +6,7 @@ def build_create_sketch_script() -> str:
     if err:
         returnValue.append(err)
     elif target_plane:
+        owner_comp = activate_component_context(owner_comp)
         # Create sketch in the owner component of the target geometry
         s = owner_comp.sketches.add(target_plane)
         s.name = params['name']

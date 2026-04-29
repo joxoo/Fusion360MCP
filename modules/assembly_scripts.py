@@ -15,9 +15,18 @@ except Exception as e:
 
 def build_create_joint_script() -> str:
     return """try:
-    c1 = find_comp_recursive(root, params['c1'])
-    c2 = find_comp_recursive(root, params['c2'])
-    
+    def resolve_joint_component(payload, name_key, path_key, legacy_key):
+        comp = resolve_component_context(payload.get(name_key), payload.get(path_key))
+        if comp:
+            return comp
+        legacy_name = payload.get(legacy_key)
+        if legacy_name:
+            return resolve_component_context(legacy_name, None)
+        return None
+
+    c1 = resolve_joint_component(params, 'component1_name', 'component1_path', 'c1')
+    c2 = resolve_joint_component(params, 'component2_name', 'component2_path', 'c2')
+
     if c1 and c2:
         geo0 = adsk.fusion.JointGeometry.createByPoint(c1.originConstructionPoint)
         geo1 = adsk.fusion.JointGeometry.createByPoint(c2.originConstructionPoint)
@@ -29,7 +38,7 @@ def build_create_joint_script() -> str:
         else: j_in.setAsRigidJointMotion()
         joints.add(j_in)
         returnValue.append("OK")
-    else: returnValue.append("ERR_COMP")
+    else: returnValue.append("ERR_COMPONENT")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
@@ -37,6 +46,15 @@ except Exception as e:
 def build_edit_assembly_script() -> str:
     return """
 try:
+    def resolve_joint_component(payload, name_key, path_key, legacy_key):
+        comp = resolve_component_context(payload.get(name_key), payload.get(path_key))
+        if comp:
+            return comp
+        legacy_name = payload.get(legacy_key)
+        if legacy_name:
+            return resolve_component_context(legacy_name, None)
+        return None
+
     results = []
     for op in params.get('operations', []):
         action = op.get('action')
@@ -47,12 +65,17 @@ try:
                 if target:
                     occ = target.occurrences.addNewComponent(adsk.core.Matrix3D.create())
                     occ.component.name = name
-                    results.append(f"{action}:OK:{occ.component.name}")
+                    occ.activate()
+                    created = resolve_component_context(occ.component.name, None)
+                    if created:
+                        results.append(f"{action}:OK:{occ.component.name}")
+                    else:
+                        results.append(f"{action}:ERR_VERIFICATION_FAILED")
                 else:
                     results.append(f"{action}:ERR_COMPONENT")
             elif action == 'create_joint':
-                c1 = find_comp_recursive(root, op['c1'])
-                c2 = find_comp_recursive(root, op['c2'])
+                c1 = resolve_joint_component(op, 'component1_name', 'component1_path', 'c1')
+                c2 = resolve_joint_component(op, 'component2_name', 'component2_path', 'c2')
                 if c1 and c2:
                     geo0 = adsk.fusion.JointGeometry.createByPoint(c1.originConstructionPoint)
                     geo1 = adsk.fusion.JointGeometry.createByPoint(c2.originConstructionPoint)
@@ -65,7 +88,7 @@ try:
                     joints.add(j_in)
                     results.append(f"{action}:OK")
                 else:
-                    results.append(f"{action}:ERR_COMP")
+                    results.append(f"{action}:ERR_COMPONENT")
             else:
                 results.append(f"{action}:ERR_UNKNOWN_ACTION")
         except Exception as e:
@@ -74,4 +97,3 @@ try:
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-
