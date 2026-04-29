@@ -99,6 +99,7 @@ def create_sketch_logic(
         error_map = {
             "ERR_BODY_OR_FACE_NOT_FOUND": "Error: Target body or face index not found.",
             "ERR_COMPONENT": localized_error("component_not_found"),
+            "ERR_VERIFICATION_FAILED": "Error: Sketch verification failed. The sketch was not created or cannot be found.",
         }
         err = map_result_error(val, lang, error_map)
         if err: return err

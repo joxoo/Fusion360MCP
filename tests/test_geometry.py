@@ -6,6 +6,7 @@ from modules.geometry import (
     delete_face_logic
 )
 from core.utils import load_i18n
+from modules.geometry_scripts import build_apply_3d_features_script, build_create_box_script
 
 class TestGeometry(unittest.TestCase):
     def setUp(self):
@@ -44,6 +45,17 @@ class TestGeometry(unittest.TestCase):
 
         res = delete_face_logic("Body1", 2, "en")
         self.assertEqual(res, "Face 2 of 'Body1' deleted.")
+
+    def test_apply_3d_features_script_uses_plain_results_and_verification(self):
+        script = build_apply_3d_features_script()
+        self.assertIn('results.append(f"{action}:ERR_VERIFICATION_FAILED")', script)
+        self.assertIn('returnValue.append(",".join(results) if results else "OK")', script)
+        self.assertNotIn("TRACE:", script)
+
+    def test_create_box_script_verifies_created_body(self):
+        script = build_create_box_script()
+        self.assertIn("if find_body_recursive(root, body.name):", script)
+        self.assertIn('returnValue.append("ERR_VERIFICATION_FAILED")', script)
 
 if __name__ == '__main__':
     unittest.main()

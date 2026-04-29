@@ -30,7 +30,10 @@ def build_create_bolt_script() -> str:
                 t_input = threads.createInput(face, t_info)
                 t_input.isModeled = params['modeled']
                 threads.add(t_input)
-                returnValue.append(size)
+                if body and body.isValid:
+                    returnValue.append(size)
+                else:
+                    returnValue.append("ERR_VERIFICATION_FAILED")
             else: returnValue.append("ERR_NO_THREAD")
         else: returnValue.append("ERR_NO_FACE")
 except Exception as e:
@@ -188,6 +191,9 @@ try:
 
                             translate_body(gear_base, px, py, pz)
                             gear_base.name = f"Gear_M{m}_Z{n}"
-                            returnValue.append(gear_base.name)
+                            if find_body_recursive(root, gear_base.name):
+                                returnValue.append(gear_base.name)
+                            else:
+                                returnValue.append("ERR_VERIFICATION_FAILED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""

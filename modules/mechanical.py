@@ -18,6 +18,7 @@ def create_bolt_logic(diameter_mm: float, length_cm: float, modeled: bool = True
             "ERR_COMPONENT": localized_error("component_not_found"),
             "ERR_NO_THREAD": localized_error("no_thread_found", diameter=diameter_mm),
             "ERR_NO_FACE": localized_error("face_not_found"),
+            "ERR_VERIFICATION_FAILED": "Error: Geometry verification failed. The body was not created or is not visible.",
         }, passthrough_err_prefix=False)
         if mapped_error:
             return mapped_error
@@ -42,6 +43,7 @@ def create_gear_logic(num_teeth: int, module: float, thickness: float = 1.0, x: 
         mapped_error = map_result_error(val, lang, {
             "ERR_COMPONENT": localized_error("component_not_found"),
             "ERR_PARAMS": localized_error("parameter_error", val="num_teeth>=4, module>0, thickness>0 required"),
+            "ERR_VERIFICATION_FAILED": "Error: Geometry verification failed. The body was not created or is not visible.",
         }, passthrough_err_prefix=False)
         if mapped_error:
             return mapped_error

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from modules.sketch import create_sketch_logic
 
 from core.utils import load_i18n
+from modules.sketch_scripts import build_create_sketch_script
 
 class TestCreateSketch(unittest.TestCase):
     def setUp(self):
@@ -52,6 +53,11 @@ class TestCreateSketch(unittest.TestCase):
 
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['component_path'], "Root/SubAssembly")
+
+    def test_create_sketch_script_verifies_created_sketch(self):
+        script = build_create_sketch_script()
+        self.assertIn("if find_sketch_recursive(root, s.name):", script)
+        self.assertIn('returnValue.append("ERR_VERIFICATION_FAILED")', script)
 
 if __name__ == '__main__':
     unittest.main()

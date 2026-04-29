@@ -169,9 +169,16 @@ try:
     for b in root.bRepBodies:
         bodies_info.append({
             "name": b.name,
+            "type": "BRep",
             "volume": b.volume,
             "area": b.area,
             "visible": b.isVisible
+        })
+    for m in root.meshBodies:
+        bodies_info.append({
+            "name": m.name,
+            "type": "Mesh",
+            "visible": m.isVisible
         })
     returnValue.append(json.dumps(bodies_info))
 except Exception as e:
@@ -182,19 +189,44 @@ def build_get_scene_map_script() -> str:
     return """import json
 try:
     scene_map = []
-    for b in root.bRepBodies:
-        bbox = b.boundingBox
-        center = b.physicalProperties.centerOfMass
-        scene_map.append({
-            "name": b.name,
-            "center": {"x": center.x, "y": center.y, "z": center.z},
-            "bbox": {
-                "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
-                "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
-                "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
-            },
-            "is_visible": b.isVisible
-        })
+    def collect_bodies(comp):
+        # BReps
+        for b in comp.bRepBodies:
+            bbox = b.boundingBox
+            try:
+                center = b.physicalProperties.centerOfMass
+                cx, cy, cz = center.x, center.y, center.z
+            except:
+                cx, cy, cz = 0, 0, 0
+                
+            scene_map.append({
+                "name": b.name,
+                "type": "BRep",
+                "center": {"x": cx, "y": cy, "z": cz},
+                "bbox": {
+                    "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
+                    "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
+                    "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
+                },
+                "is_visible": b.isVisible
+            })
+        # Meshes
+        for m in comp.meshBodies:
+            bbox = m.boundingBox
+            scene_map.append({
+                "name": m.name,
+                "type": "Mesh",
+                "bbox": {
+                    "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
+                    "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
+                    "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
+                },
+                "is_visible": m.isVisible
+            })
+        for occ in comp.occurrences:
+            collect_bodies(occ.component)
+
+    collect_bodies(root)
     returnValue.append(json.dumps(scene_map))
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
@@ -204,31 +236,27 @@ def build_validate_model_script() -> str:
     return """import json
 try:
     results = {
-        "body_count": root.bRepBodies.count,
-        "is_single_solid": root.bRepBodies.count == 1,
+        "brep_count": 0,
+        "mesh_count": 0,
         "bodies": [],
-        "interferences": 0,
         "manifold_issues": []
     }
     
-    all_bodies = adsk.core.ObjectCollection.create()
-    for b in root.bRepBodies:
-        all_bodies.add(b)
-        is_solid = b.isSolid
-        results["bodies"].append({
-            "name": b.name,
-            "is_solid": is_solid,
-            "volume": b.volume
-        })
-        if not is_solid:
-            results["manifold_issues"].append(f"Body '{b.name}' is not a closed solid (surface only).")
+    def validate_comp(comp):
+        for b in comp.bRepBodies:
+            results["brep_count"] += 1
+            results["bodies"].append({"name": b.name, "type": "BRep", "is_solid": b.isSolid})
+            if not b.isSolid:
+                results["manifold_issues"].append(f"BRep '{b.name}' in {comp.name} is open.")
 
-    if root.bRepBodies.count > 1:
-        design = adsk.fusion.Design.cast(app.activeProduct)
-        int_input = design.createInterferenceInput(all_bodies)
-        int_results = design.analyzeInterference(int_input)
-        results["interferences"] = int_results.count
+        for m in comp.meshBodies:
+            results["mesh_count"] += 1
+            results["bodies"].append({"name": m.name, "type": "Mesh"})
+            
+        for occ in comp.occurrences:
+            validate_comp(occ.component)
 
+    validate_comp(root)
     returnValue.append(json.dumps(results))
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
@@ -241,6 +269,7 @@ def get_comp_info(comp, path):
         "name": comp.name,
         "path": path,
         "bodies": [b.name for b in comp.bRepBodies],
+        "meshes": [m.name for m in comp.meshBodies],
         "sketches": [s.name for s in comp.sketches],
         "components": []
     }
@@ -261,9 +290,36 @@ def build_analyze_design_script() -> str:
 import json, base64, os, tempfile
 try:
     action = params.get('action', 'validate')
+    def collect_scene_map(comp, scene_map):
+        for b in comp.bRepBodies:
+            bbox = b.boundingBox
+            try:
+                center = b.physicalProperties.centerOfMass
+                cx, cy, cz = center.x, center.y, center.z
+            except:
+                cx, cy, cz = 0, 0, 0
+            scene_map.append({"name": b.name, "type": "BRep", "center": {"x": cx, "y": cy, "z": cz}, "bbox": {"min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z}, "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z}, "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}}, "is_visible": b.isVisible})
+        for m in comp.meshBodies:
+            bbox = m.boundingBox
+            scene_map.append({"name": m.name, "type": "Mesh", "bbox": {"min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z}, "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z}, "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}}, "is_visible": m.isVisible})
+        for occ in comp.occurrences:
+            collect_scene_map(occ.component, scene_map)
+
+    def collect_validation(comp, results):
+        for b in comp.bRepBodies:
+            results["brep_count"] += 1
+            results["bodies"].append({"name": b.name, "type": "BRep", "is_solid": b.isSolid})
+            if not b.isSolid:
+                results["manifold_issues"].append(f"BRep '{b.name}' in {comp.name} is open.")
+        for m in comp.meshBodies:
+            results["mesh_count"] += 1
+            results["bodies"].append({"name": m.name, "type": "Mesh"})
+        for occ in comp.occurrences:
+            collect_validation(occ.component, results)
+
     if action == 'get_assembly_tree':
         def get_comp_info(comp, path):
-            info = {"name": comp.name, "path": path, "bodies": [b.name for b in comp.bRepBodies], "sketches": [s.name for s in comp.sketches], "components": []}
+            info = {"name": comp.name, "path": path, "bodies": [b.name for b in comp.bRepBodies], "meshes": [m.name for m in comp.meshBodies], "sketches": [s.name for s in comp.sketches], "components": []}
             for occ in comp.occurrences: info["components"].append(get_comp_info(occ.component, f"{path}/{occ.name}"))
             return info
         returnValue.append(json.dumps(get_comp_info(root, "Root")))
@@ -274,55 +330,28 @@ try:
         with open(path, 'rb') as f: returnValue.append(base64.b64encode(f.read()).decode('utf-8'))
         os.remove(path)
     elif action == 'validate':
-        results = {"body_count": root.bRepBodies.count, "interferences": 0, "manifold_issues": []}
-        all_bodies = adsk.core.ObjectCollection.create()
-        for b in root.bRepBodies:
-            all_bodies.add(b)
-            if not b.isSolid: results["manifold_issues"].append(b.name)
-        if root.bRepBodies.count > 1:
-            results["interferences"] = adsk.fusion.Design.cast(app.activeProduct).analyzeInterference(adsk.fusion.Design.cast(app.activeProduct).createInterferenceInput(all_bodies)).count
+        results = {"body_count": 0, "brep_count": 0, "mesh_count": 0, "bodies": [], "manifold_issues": []}
+        collect_validation(root, results)
+        results["body_count"] = results["brep_count"]
         returnValue.append(json.dumps(results))
     elif action == 'scene_map':
         scene_map = []
-        for b in root.bRepBodies:
-            bbox = b.boundingBox
-            center = b.physicalProperties.centerOfMass
-            scene_map.append({
-                "name": b.name,
-                "center": {"x": center.x, "y": center.y, "z": center.z},
-                "bbox": {
-                    "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
-                    "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
-                    "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
-                },
-                "is_visible": b.isVisible
-            })
+        collect_scene_map(root, scene_map)
         returnValue.append(json.dumps(scene_map))
     elif action == 'physical_data':
         target = find_body_recursive(root, params.get('body'))
         if target:
             props = target.physicalProperties
             res, ixx, iyy, izz, ixy, iyz, ixz = props.getXYZMomentsOfInertia()
-            returnValue.append(json.dumps({
-                "name": target.name, "mass_kg": props.mass, "volume_cm3": props.volume,
-                "density_kg_cm3": props.density, "area_cm2": props.area,
-                "moments_of_inertia": {"ixx": ixx, "iyy": iyy, "izz": izz, "ixy": ixy, "iyz": iyz, "ixz": ixz}
-            }))
+            returnValue.append(json.dumps({"name": target.name, "mass_kg": props.mass, "volume_cm3": props.volume, "density_kg_cm3": props.density, "area_cm2": props.area, "moments_of_inertia": {"ixx": ixx, "iyy": iyy, "izz": izz, "ixy": ixy, "iyz": iyz, "ixz": ixz}}))
         else: returnValue.append("ERR_BODY")
     elif action == 'bounding_box':
         target = find_body_recursive(root, params.get('body'))
         if target:
             bbox = target.boundingBox
-            returnValue.append(json.dumps({
-                "name": target.name,
-                "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
-                "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
-                "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
-            }))
+            returnValue.append(json.dumps({"name": target.name, "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z}, "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z}, "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}}))
         else: returnValue.append("ERR_BODY")
-    else:
-        returnValue.append("ERR_UNKNOWN_ACTION")
+    else: returnValue.append("ERR_UNKNOWN_ACTION")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-

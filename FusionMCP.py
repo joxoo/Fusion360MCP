@@ -9,6 +9,7 @@ import shutil
 import sys
 import io
 import contextlib
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -85,6 +86,7 @@ mcp_port = 8081
 command_history = []
 MAX_LOG_ENTRIES = 20
 handlers = []
+KEEP_MCP_SERVER_RUNNING_ON_ADDIN_STOP = True
 
 def add_to_log(msg):
     global command_history
@@ -278,29 +280,62 @@ def find_uv():
         if os.path.exists(path): return path
     return None
 
-def cleanup_mcp_port():
-    global mcp_port
+def cleanup_mcp_port(force=False):
+    global mcp_port, mcp_process
     try:
+        # Never kill arbitrary processes on the MCP port during normal startup/shutdown.
+        # Only clean up aggressively when we still own a known child process and were
+        # explicitly asked to do so as a last-resort recovery step.
+        if not force:
+            add_to_log(f"Skipped aggressive cleanup for port {mcp_port}; no forced port kill requested.")
+            return
+
+        if not mcp_process:
+            add_to_log(f"Skipped aggressive cleanup for port {mcp_port}; no known FusionMCP child process.")
+            return
+
         if os.name == 'nt':
-            # Windows: Find PID on port and kill it
-            cmd = f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :{mcp_port}\') do taskkill /f /pid %a'
+            cmd = f'taskkill /f /pid {mcp_process.pid}'
             subprocess.run(cmd, shell=True, check=False, capture_output=True)
         else:
-            # Unix: Find PID on port and kill it
-            cmd = f'lsof -t -i:{mcp_port} | xargs kill -9'
-            subprocess.run(cmd, shell=True, check=False, capture_output=True)
-        add_to_log(f"Cleaned up port {mcp_port}")
+            try:
+                os.killpg(os.getpgid(mcp_process.pid), signal.SIGKILL)
+            except:
+                try:
+                    os.kill(mcp_process.pid, signal.SIGKILL)
+                except:
+                    pass
+        add_to_log(f"Forced cleanup attempted for FusionMCP MCP process on port {mcp_port}")
     except: pass
+
+def is_mcp_server_healthy():
+    global mcp_host, mcp_port
+    try:
+        with urllib.request.urlopen(f'http://{mcp_host}:{mcp_port}/mcp', timeout=1.5) as response:
+            if response.status != 200:
+                return False
+            payload = json.loads(response.read().decode('utf-8'))
+            return payload.get('status') == 'mcp_server_online'
+    except:
+        return False
 
 def start_mcp_server():
     global mcp_process, mcp_host, mcp_port
     try:
         addon_dir = os.path.dirname(__file__)
         log_file = os.path.join(addon_dir, 'mcp_error.log')
-        
-        # Always try to cleanup the port before starting
-        stop_mcp_process()
-        cleanup_mcp_port()
+
+        if mcp_process and mcp_process.poll() is not None:
+            mcp_process = None
+
+        if is_mcp_server_healthy():
+            add_to_log(f'MCP Server already running on {mcp_host}:{mcp_port}; reusing existing process.')
+            return
+
+        if mcp_process:
+            stop_mcp_process()
+
+        cleanup_mcp_port(force=False)
         
         server_script = os.path.join(addon_dir, 'fusion_mcp_server.py')
         req_file = os.path.join(addon_dir, 'requirements.txt')
@@ -461,9 +496,15 @@ def stop(context):
                 except: pass
                 http_server = None
             threading.Thread(target=shutdown_and_close).start()
-            
-        stop_mcp_process()
-        cleanup_mcp_port() # Also cleanup port on stop
+
+        if KEEP_MCP_SERVER_RUNNING_ON_ADDIN_STOP:
+            add_to_log('Fusion add-in stopped. Leaving MCP Server running so external clients stay connected.')
+            mcp_status_msg = 'FusionMCP add-in stopped; MCP server kept alive.'
+        else:
+            stop_mcp_process()
+            cleanup_mcp_port(force=True) # Last-resort cleanup only when explicitly shutting down our own server
+            mcp_status_msg = 'FusionMCP add-in stopped; MCP server shut down.'
+
         if custom_event: app.unregisterCustomEvent(EVENT_ID)
         cmd_def = ui.commandDefinitions.itemById(CMD_ID)
         if cmd_def: cmd_def.deleteMe()
@@ -473,5 +514,5 @@ def stop(context):
             if panel:
                 ctrl = panel.controls.itemById(CMD_ID)
                 if ctrl: ctrl.deleteMe()
-        app.log('FusionMCP stopped.')
+        app.log(mcp_status_msg)
     except: pass

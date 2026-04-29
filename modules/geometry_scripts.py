@@ -592,7 +592,10 @@ def build_create_cylinder_script() -> str:
     if body.parentComponent != active_comp:
         try: body.moveToComponent(d.activeOccurrence)
         except: pass
-    returnValue.append(body.name)
+    if find_body_recursive(root, body.name):
+        returnValue.append(body.name)
+    else:
+        returnValue.append("ERR_VERIFICATION_FAILED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
@@ -620,7 +623,10 @@ def build_create_sphere_script() -> str:
         rev_feat = revolves.add(rev_in)
         body = rev_feat.bodies.item(0)
         body.name = params['name']
-        returnValue.append(body.name)
+        if find_body_recursive(root, body.name):
+            returnValue.append(body.name)
+        else:
+            returnValue.append("ERR_VERIFICATION_FAILED")
     else:
         returnValue.append("ERR_SKETCH")
 except Exception as e:
@@ -651,7 +657,10 @@ def build_create_torus_script() -> str:
         rev_feat = revolves.add(rev_in)
         body = rev_feat.bodies.item(0)
         body.name = params['name']
-        returnValue.append(body.name)
+        if find_body_recursive(root, body.name):
+            returnValue.append(body.name)
+        else:
+            returnValue.append("ERR_VERIFICATION_FAILED")
     else:
         returnValue.append("ERR_SKETCH")
 except Exception as e:
@@ -676,7 +685,10 @@ def build_create_coil_script() -> str:
 
     if created:
         created.name = params['name']
-        returnValue.append(created.name)
+        if find_body_recursive(root, created.name):
+            returnValue.append(created.name)
+        else:
+            returnValue.append("ERR_VERIFICATION_FAILED")
     else:
         returnValue.append("ERR_UNSUPPORTED: Coil creation is not available in the current Fusion command/runtime context.")
 except Exception as e:
@@ -696,7 +708,10 @@ def build_create_pipe_script() -> str:
         pipe_feat = pipes.add(p_in)
         body = pipe_feat.bodies.item(0)
         body.name = params['name']
-        returnValue.append(body.name)
+        if find_body_recursive(root, body.name):
+            returnValue.append(body.name)
+        else:
+            returnValue.append("ERR_VERIFICATION_FAILED")
     else: returnValue.append("ERR_PATH")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
@@ -721,7 +736,10 @@ def build_create_box_script() -> str:
         body = box.bodies.item(0)
         translate_body(body, params['x'], params['y'], params['z'])
         body.name = params['name']
-        returnValue.append(body.name)
+        if find_body_recursive(root, body.name):
+            returnValue.append(body.name)
+        else:
+            returnValue.append("ERR_VERIFICATION_FAILED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
 
@@ -867,8 +885,20 @@ def build_extrude_sketch_script() -> str:
                     ext_in.participantBodies = all_bodies
             if len(returnValue) == 0:
                 ext = extrudes.add(ext_in)
-                
-                if ext.bodies.count > 0:
+
+                if op == adsk.fusion.FeatureOperations.NewBodyFeatureOperation and ext.bodies.count > 0:
+                    created_name = ext.bodies.item(0).name
+                    if find_body_recursive(root, created_name):
+                        returnValue.append(created_name)
+                    else:
+                        returnValue.append("ERR_VERIFICATION_FAILED")
+                elif op == adsk.fusion.FeatureOperations.NewComponentFeatureOperation and ext.bodies.count > 0:
+                    created_name = ext.bodies.item(0).name
+                    if find_body_recursive(root, created_name):
+                        returnValue.append(created_name)
+                    else:
+                        returnValue.append("ERR_VERIFICATION_FAILED")
+                elif ext.bodies.count > 0:
                     returnValue.append(ext.bodies.item(0).name)
                 else:
                     returnValue.append("OK")
@@ -972,8 +1002,10 @@ def build_apply_3d_features_script() -> str:
     return """
 try:
     results = []
-    for op in params.get('operations', []):
-        action = op.get('action')
+    ops = params.get('operations', [])
+    
+    for op in ops:
+        action = op.get('action') or op.get('type')
         try:
             if action == 'extrude':
                 s, owner_comp, err = resolve_sketch_context(op['sketch'], op.get('component_name'), op.get('component_path'))
@@ -987,8 +1019,11 @@ try:
                 exts = owner_comp.features.extrudeFeatures
                 ext_in = exts.createInput(profs, op_type)
                 ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(op['dist']))
-                exts.add(ext_in)
-                results.append(f"{action}:OK")
+                ext_feat = exts.add(ext_in)
+                if ext_feat.bodies.count > 0:
+                    results.append(f"{action}:OK")
+                else:
+                    results.append(f"{action}:ERR_VERIFICATION_FAILED")
 
             elif action == 'fillet':
                 target = find_body_recursive(root, op['body'])
@@ -1025,7 +1060,7 @@ try:
                 combines.add(c_in)
                 results.append(f"{action}:OK")
 
-            elif action == 'create_box':
+            elif action == 'create_box' or action == 'Box':
                 pt = adsk.core.Point3D.create(0, 0, 0)
                 s = active_comp.sketches.add(active_comp.xYConstructionPlane)
                 s.sketchCurves.sketchLines.addTwoPointRectangle(pt, adsk.core.Point3D.create(pt.x + op['l'], pt.y + op['w'], 0))
@@ -1034,38 +1069,54 @@ try:
                     body = box.bodies.item(0)
                     translate_body(body, op.get('x', 0), op.get('y', 0), op.get('z', 0))
                     body.name = op.get('name', 'Box')
-                    results.append(f"{action}:OK:{body.name}")
+                    if find_body_recursive(active_comp, body.name):
+                        results.append(f"{action}:OK:{body.name}")
+                    else:
+                        results.append(f"{action}:ERR_VERIFICATION_FAILED")
                 else: results.append(f"{action}:ERR_NO_PROFILE")
 
-            elif action == 'create_cylinder':
+            elif action == 'create_cylinder' or action == 'Cylinder':
                 center = adsk.core.Point3D.create(op.get('x', 0), op.get('y', 0), op.get('z', 0))
                 sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
                 r = float(op.get('radius', op.get('r', 0)))
                 sk.sketchCurves.sketchCircles.addByCenterRadius(center, r)
                 ext = active_comp.features.extrudeFeatures.addSimple(sk.profiles.item(0), adsk.core.ValueInput.createByReal(op['h']), 3)
                 body = ext.bodies.item(0); body.name = op.get('name', 'Cylinder')
-                results.append(f"{action}:OK:{body.name}")
+                if find_body_recursive(active_comp, body.name):
+                    results.append(f"{action}:OK:{body.name}")
+                else:
+                    results.append(f"{action}:ERR_VERIFICATION_FAILED")
 
-            elif action == 'create_bolt':
-                # Simplified bolt creation script snippet
-                results.append(f"{action}:SKIPPED_NOT_YET_PORTED")
-
-            elif action == 'create_gear':
-                # Simplified gear creation script snippet
-                results.append(f"{action}:SKIPPED_NOT_YET_PORTED")
-
-            elif action == 'apply_thread':
-                # Simplified thread application
-                results.append(f"{action}:SKIPPED_NOT_YET_PORTED")
+            elif action == 'create_sphere' or action == 'Sphere':
+                center_coords = op.get('center', [0,0,0])
+                center = adsk.core.Point3D.create(op.get('x', center_coords[0]), op.get('y', center_coords[1]), op.get('z', center_coords[2]))
+                r = float(op.get('radius', op.get('r', 0.1)))
+                sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
+                startPoint = adsk.core.Point3D.create(center.x, center.y + r, center.z)
+                endPoint = adsk.core.Point3D.create(center.x, center.y - r, center.z)
+                alongArcPoint = adsk.core.Point3D.create(center.x + r, center.y, center.z)
+                sk.sketchCurves.sketchArcs.addByThreePoints(startPoint, alongArcPoint, endPoint)
+                axisLine = sk.sketchCurves.sketchLines.addByTwoPoints(startPoint, endPoint)
+                if sk.profiles.count > 0:
+                    rev_in = active_comp.features.revolveFeatures.createInput(sk.profiles.item(0), axisLine, 3)
+                    rev_in.isSolid = True
+                    rev_in.setAngleExtent(False, adsk.core.ValueInput.createByReal(2 * 3.14159))
+                    rev_feat = active_comp.features.revolveFeatures.add(rev_in)
+                    body = rev_feat.bodies.item(0); body.name = op.get('name', 'Sphere')
+                    if find_body_recursive(active_comp, body.name):
+                        results.append(f"{action}:OK:{body.name}")
+                    else:
+                        results.append(f"{action}:ERR_VERIFICATION_FAILED")
+                else:
+                    results.append(f"{action}:ERR_NO_PROFILE")
 
             else:
                 results.append(f"{action}:ERR_UNKNOWN_ACTION")
 
         except Exception as e:
             results.append(f"{action}:ERR:{str(e)}")
+            
     returnValue.append(",".join(results) if results else "OK")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-
-

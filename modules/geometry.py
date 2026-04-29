@@ -55,6 +55,7 @@ GEOMETRY_ERROR_MAP = {
     "ERR_BODY": localized_error("body_not_found"),
     "ERR_TARGET": localized_error("body_not_found"),
     "ERR_NOT_FOUND": localized_error("feature_not_found"),
+    "ERR_VERIFICATION_FAILED": "Error: Geometry verification failed. The body was not created or is not visible.",
     "ERR_MIN_SURFACES": "Error: At least one surface is required.",
     "ERR_NO_PROFILE": "Error: No profile found in sketch.",
     "ERR_OWNER_MISMATCH": localized_error("entity_owner_mismatch"),
@@ -65,7 +66,7 @@ def create_box_logic(l: float, w: float, h: float, name: str, x: float = 0, y: f
     try:
         res = execute_fusion_script(build_create_box_script(), {"l":l, "w":w, "h":h, "name":name, "x":x, "y":y, "z":z}, use_common=["placement"])
         val = get_result_value(res)
-        error_map = {"ERR_NO_PROFILE": localized_error("sketch_not_found")}
+        error_map = {"ERR_NO_PROFILE": localized_error("sketch_not_found"), "ERR_VERIFICATION_FAILED": GEOMETRY_ERROR_MAP["ERR_VERIFICATION_FAILED"]}
         err = map_result_error(val, lang, error_map)
         if err: return err
         return format_response(lang, "box_created", name=val)
@@ -114,14 +115,41 @@ def create_shell_logic(body: str, thickness: float, lang: str = "en"):
 def apply_3d_features_logic(operations: list[dict], lang: str = "en"):
     """
     Applies multiple 3D geometry features in a single batch.
-    Supported actions: extrude, fillet, chamfer, combine, create_box, create_cylinder.
-    Each operation should be a dict with 'action' and required parameters.
+    Supported actions: extrude, fillet, chamfer, combine, create_box, create_cylinder, create_sphere.
+    Each operation should be a dict with 'action' or 'type' and required parameters.
     """
     try:
         res = execute_fusion_script(build_apply_3d_features_script(), {"operations": operations}, use_common=["find_body"])
-        val = get_result_value(res)
-        err = map_result_error(val, lang, GEOMETRY_ERROR_MAP)
-        if err: return err
+        val = str(get_result_value(res))
+        parts = val.split(",")
+        errors = []
+        successes = []
+        
+        for p in parts:
+            if ":ERR" in p or "ERR_" in p:
+                errors.append(p)
+            elif ":OK" in p or p == "OK":
+                successes.append(p)
+            else:
+                if p.startswith("ERR_"):
+                    errors.append(p)
+
+        if errors:
+            mapped_errors = []
+            for e in errors:
+                found_mapping = False
+                for code, message in GEOMETRY_ERROR_MAP.items():
+                    if code in e:
+                        mapped_errors.append(f"{e} -> {message if isinstance(message, str) else message.get('key', code)}")
+                        found_mapping = True
+                        break
+                if not found_mapping:
+                    mapped_errors.append(e)
+            return f"Error: Some operations failed: {'; '.join(mapped_errors)}"
+        
+        if not successes and val != "OK":
+             return f"Error: No successful operations. Result: {val}"
+
         return format_response(lang, "geometry_updated")
     except FusionBridgeError as e: return bridge_error_message(e)
 

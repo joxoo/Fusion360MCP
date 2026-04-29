@@ -9,7 +9,10 @@ def build_create_sketch_script() -> str:
         # Create sketch in the owner component of the target geometry
         s = owner_comp.sketches.add(target_plane)
         s.name = params['name']
-        returnValue.append(s.name)
+        if find_sketch_recursive(root, s.name):
+            returnValue.append(s.name)
+        else:
+            returnValue.append("ERR_VERIFICATION_FAILED")
     else:
         returnValue.append("ERR_CONTEXT_NOT_RESOLVED")
 except Exception as e:
@@ -348,4 +351,3 @@ try:
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-

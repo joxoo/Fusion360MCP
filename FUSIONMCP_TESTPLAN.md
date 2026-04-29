@@ -31,7 +31,7 @@ Dieser Testplan dient der Verifizierung der konsolidierten Batch-Architektur von
 - **Apply Features:** `apply_3d_features(operations=[...])`
   - `{"action": "create_box", "l": 10, "w": 10, "h": 5, "name": "Box1"}`
   - `{"action": "create_cylinder", "r": 5, "h": 10, "name": "Cyl1"}`
-  - `{"action": "extrude", "sketch_name": "Base", "distance": 10}`
+  - `{"action": "extrude", "sketch": "Base", "dist": 10 }`
   - `{"action": "fillet", "body": "Box1", "radius": 2}`
   - `{"action": "chamfer", "body": "Box1", "distance": 1}`
 
