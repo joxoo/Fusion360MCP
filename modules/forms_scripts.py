@@ -325,3 +325,48 @@ def build_create_form_torus_script() -> str:
         returnValue.append("ERR_UNSUPPORTED")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_edit_forms_script() -> str:
+    return """
+try:
+    results = []
+    for op in params.get('operations', []):
+        action = op.get('action')
+        try:
+            if action in ['extrude', 'revolve', 'sweep', 'loft']:
+                if action == 'extrude':
+                    s, owner_comp, err = resolve_sketch_context(op['sketch'], op.get('component_name'), op.get('component_path'))
+                    if s and s.profiles.count > 0:
+                        feat = owner_comp.features.formFeatures.addExtrude(s.profiles.item(0), adsk.core.ValueInput.createByReal(op['dist']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                        results.append(f"{action}:OK:{feat.bodies.item(0).name}")
+                    else: results.append(f"{action}:ERR_SKETCH")
+            else:
+                target = find_tspline_body_recursive(root, op['body'])
+                if not target: results.append(f"{action}:ERR_BODY"); continue
+                
+                if action == 'set_display_mode':
+                    mode = op.get('mode', 'Smooth').lower()
+                    ui.activeSelections.clear(); ui.activeSelections.add(target)
+                    if mode == 'box': app.executeTextCommand(u'Commands.Start TSplineBoxDisplayCommand')
+                    else: app.executeTextCommand(u'Commands.Start TSplineSmoothDisplayCommand')
+                    results.append(f"{action}:OK")
+                elif action == 'clear_symmetry':
+                    target.parentFormFeature.startEdit()
+                    target.symmetries.clearSymmetry()
+                    target.parentFormFeature.finishEdit()
+                    results.append(f"{action}:OK")
+                elif action == 'convert':
+                    ui.activeSelections.clear(); ui.activeSelections.add(target)
+                    app.executeTextCommand(u'Commands.Start TSplineConvertCommand')
+                    app.executeTextCommand(u'NuCommands.CommitCmd')
+                    results.append(f"{action}:OK")
+                else:
+                    results.append(f"{action}:ERR_UNKNOWN_ACTION")
+        except Exception as e:
+            results.append(f"{action}:ERR:{str(e)}")
+    returnValue.append(",".join(results) if results else "OK")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")
+"""
+

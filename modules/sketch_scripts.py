@@ -300,3 +300,52 @@ def build_draw_slot_script() -> str:
     else: returnValue.append("ERR_SKETCH_NOT_FOUND")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_edit_sketch_script() -> str:
+    return """
+import math
+try:
+    s, owner, err = resolve_sketch_context(params['sketch'])
+    if err:
+        returnValue.append(err)
+    elif s:
+        results = []
+        for op in params.get('operations', []):
+            action = op.get('action')
+            try:
+                if action == 'draw_line':
+                    p1 = adsk.core.Point3D.create(op['x1'], op['y1'], 0)
+                    p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
+                    s.sketchCurves.sketchLines.addByTwoPoints(p1, p2)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_circle':
+                    center = adsk.core.Point3D.create(op['x'], op['y'], 0)
+                    r = float(op.get('radius', op.get('r', 0)))
+                    s.sketchCurves.sketchCircles.addByCenterRadius(center, r)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_rectangle':
+                    p1 = adsk.core.Point3D.create(op['x1'], op['y1'], 0)
+                    p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
+                    s.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_polygon':
+                    cx, cy = float(op['cx']), float(op['cy'])
+                    r = float(op.get('radius', op.get('r', 0)))
+                    n = int(op.get('sides', 6))
+                    pts = [adsk.core.Point3D.create(cx + r*math.cos(i*2*math.pi/n), cy + r*math.sin(i*2*math.pi/n), 0) for i in range(n)]
+                    for i in range(n): s.sketchCurves.sketchLines.addByTwoPoints(pts[i], pts[(i+1)%n])
+                    results.append(f"{action}:OK")
+                elif action == 'add_constraint':
+                    results.append(f"{action}:SKIPPED_NOT_YET_SUPPORTED_IN_BATCH")
+                else:
+                    results.append(f"{action}:ERR_UNKNOWN_ACTION")
+            except Exception as e:
+                results.append(f"{action}:ERR:{str(e)}")
+        returnValue.append(",".join(results) if results else "OK")
+    else:
+        returnValue.append("ERR_SKETCH_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")
+"""
+

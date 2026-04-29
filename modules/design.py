@@ -3,15 +3,10 @@ from core.utils import format_response, register_tool
 from core.error_handler import (
     bridge_error_message,
     get_result_value,
-    map_result_error,
-    localized_error,
 )
 from modules.design_scripts import (
-    build_cleanup_design_script,
-    build_create_new_design_script,
-    build_restart_mcp_script,
+    build_manage_design_script,
 )
-
 
 def _reject_blocking_dialog_calls(script: str) -> str | None:
     blocked_markers = (
@@ -30,34 +25,19 @@ def _reject_blocking_dialog_calls(script: str) -> str | None:
         )
     return None
 
-def cleanup_design_logic(lang: str = "en"):
-    """Unifies cleanup logic for both DE and EN."""
+def manage_design_logic(action: str = "cleanup", lang: str = "en", filename: str = "model"):
+    """
+    Handles design-level operations.
+    Supported actions: cleanup, restart_mcp, create_new, export_step, export_stl.
+    """
     try:
-        res = execute_fusion_script(build_cleanup_design_script())
-        val = get_result_value(res, "Error")
-        if val == "OK":
-            return format_response(lang, "design_cleaned")
-        return val
+        res = execute_fusion_script(build_manage_design_script(), {"action": action, "filename": filename})
+        val = get_result_value(res)
+        if val == "OK" or "Exported" in val:
+            msg_map = {"cleanup": "design_cleaned", "restart_mcp": "mcp_restart_sent", "create_new": "document_created"}
+            return format_response(lang, msg_map.get(action, "OK"))
+        return f"Error: {val}"
     except FusionBridgeError as e: return bridge_error_message(e)
-
-def restart_mcp_logic(lang: str = "en"):
-    """Manually restarts the MCP server subprocess."""
-    try:
-        execute_fusion_script(build_restart_mcp_script())
-        return format_response(lang, "mcp_restart_sent")
-    except FusionBridgeError as e: return bridge_error_message(e)
-
-def create_new_design_logic(lang: str = "en"):
-    """Creates a new empty Fusion 360 document."""
-    try:
-        if execute_fusion_script(build_create_new_design_script()):
-            return format_response(lang, "document_created")
-        return "Error creating document."
-    except FusionBridgeError as e: return bridge_error_message(e)
-
-def change_design_mode_logic(mode: str = "Assembly", lang: str = "en"):
-    """Switch mode between 'Part' and 'Assembly'."""
-    return format_response(lang, "mode_changed")
 
 def direct_api_access_logic(script: str, lang: str = "en"):
     """Executes raw Python code directly in Fusion 360."""
@@ -91,9 +71,6 @@ def register_design_tools(mcp):
     global _mcp_instance
     _mcp_instance = mcp
     
+    register_tool(mcp, "manage_design", manage_design_logic)
     register_tool(mcp, "direct_api_access", direct_api_access_logic)
     register_tool(mcp, "list_mcp_tools", list_mcp_tools_logic)
-    register_tool(mcp, "cleanup_design", cleanup_design_logic)
-    register_tool(mcp, "restart_mcp", restart_mcp_logic)
-    register_tool(mcp, "create_new_design", create_new_design_logic)
-    register_tool(mcp, "change_design_mode", change_design_mode_logic)

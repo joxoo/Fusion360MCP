@@ -135,3 +135,47 @@ def build_tessellate_body_script() -> str:
     else: returnValue.append("ERR_BODY")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_edit_mesh_script() -> str:
+    return """
+try:
+    results = []
+    for op in params.get('operations', []):
+        action = op.get('action')
+        target = find_body_recursive(root, op.get('body'))
+        if not target or target.objectType != adsk.fusion.MeshBody.classType():
+            results.append(f"{action}:ERR_NOT_A_MESH"); continue
+
+        ui.activeSelections.clear()
+        ui.activeSelections.add(target)
+        try:
+            if action == 'remesh':
+                app.executeTextCommand(u'Commands.Start ParaMeshRemeshCommand')
+                app.executeTextCommand(u'Commands.SetDouble infoDensity ' + str(op.get('density', 0.5)))
+                app.executeTextCommand(u'NuCommands.CommitCmd')
+                results.append(f"{action}:OK")
+            elif action == 'smooth':
+                app.executeTextCommand(u'Commands.Start ParaMeshSmoothCommand')
+                app.executeTextCommand(u'Commands.SetDouble infoSmoothing ' + str(op.get('smoothing', 0.5)))
+                app.executeTextCommand(u'NuCommands.CommitCmd')
+                results.append(f"{action}:OK")
+            elif action == 'repair':
+                app.executeTextCommand(u'Commands.Start ParaMeshRepairCommand')
+                app.executeTextCommand(u'Commands.SetString infoRepairType ' + op.get('repair_type', 'infoTypeDefault'))
+                app.executeTextCommand(u'NuCommands.CommitCmd')
+                results.append(f"{action}:OK")
+            elif action == 'convert':
+                app.executeTextCommand(u'Commands.Start Mesh2BRepCommand')
+                app.executeTextCommand(u'Commands.SetString infoConversionType ' + op.get('conv_type', 'infoPrismatic'))
+                app.executeTextCommand(u'NuCommands.CommitCmd')
+                results.append(f"{action}:OK")
+            else:
+                results.append(f"{action}:ERR_UNKNOWN_ACTION")
+        except Exception as e:
+            results.append(f"{action}:ERR:{str(e)}")
+    returnValue.append(",".join(results) if results else "OK")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")
+"""
+

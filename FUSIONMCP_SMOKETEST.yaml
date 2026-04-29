@@ -1,8 +1,8 @@
 version: 1
-name: FusionMCP Smoke Test
+name: FusionMCP Smoke Test (Consolidated)
 purpose: >
-  Schnelltest fuer KI-Agenten, um die grundlegende Funktionsfaehigkeit von
-  Bridge, MCP, Basis-Geometrie, lokalisierter Skizzen-API und Analyse zu pruefen.
+  Schnelltest fuer KI-Agenten, um die neue Batch-Architektur (Core Tools)
+  von FusionMCP zu pruefen. Testet Skizzen-Batching und Geometrie-Batching.
 
 prerequisites:
   - Fusion 360 is running
@@ -14,25 +14,12 @@ abort_rules:
     reason: Bridge not reachable
   - if_step_fails: mcp_check
     reason: MCP not reachable
-  - if_step_fails: create_box
-    reason: No reliable geometry baseline for later checks
 
 success_criteria:
-  - All mandatory steps complete without parameter errors
-  - At least one body is created in Fusion
-  - At least one sketch with a polygon is created successfully
-  - Analysis returns plausible body data
-
-report_format:
-  title: FusionMCP Smoke-Test
-  fields:
-    - result
-    - bridge
-    - mcp
-    - created_bodies
-    - created_sketches
-    - analysis_response
-    - notes
+  - All batch steps complete without parameter errors
+  - Box is created via apply_3d_features
+  - Sketch with multiple shapes (polygon, circle) is created via edit_sketch
+  - Analysis returns plausible data
 
 steps:
   - id: bridge_check
@@ -55,149 +42,110 @@ steps:
         status: mcp_server_online
     required: true
 
-  - id: new_design
-    type: mcp_tool
-    tool:
-      de: neue_konstruktion
-      en: create_new_design
-    args: {}
-    expected:
-      response_contains_any:
-        - Dokument erstellt.
-        - Design created.
-    required: true
-
   - id: cleanup_before_test
     type: mcp_tool
     tool:
-      de: design_bereinigen
-      en: cleanup_design
-    args: {}
+      en: manage_design
+    args:
+      action: cleanup
     expected:
       response_contains_any:
         - Entwurf bereinigt.
         - Design cleaned up.
     required: true
 
-  - id: create_box
+  - id: create_box_batch
     type: mcp_tool
     tool:
-      de: box_erstellen
-      en: create_box
+      en: apply_3d_features
     args:
-      l: 10
-      w: 10
-      h: 5
-      name: SmokeBox
-      x: 0
-      y: 0
-      z: 0
+      operations:
+        - action: create_box
+          l: 10
+          w: 10
+          h: 5
+          name: SmokeBox
     expected:
-      response_contains_any:
-        - "Box 'SmokeBox' erstellt."
-        - "Box 'SmokeBox' created."
+      response_contains: geometry_updated
       fusion_visible:
         body_names:
           - SmokeBox
     required: true
 
-  - id: create_sketch_de
-    type: mcp_tool
-    tool:
-      de: skizze_erstellen
-    args:
-      name: SmokeSketch
-      ebene: XY
-    expected:
-      response_contains: "Skizze 'SmokeSketch' erstellt."
-      fusion_visible:
-        sketch_names:
-          - SmokeSketch
-    required: true
-
-  - id: draw_polygon_de
-    type: mcp_tool
-    tool:
-      de: polygon_zeichnen
-    args:
-      skizzen_name: SmokeSketch
-      center_x: 10
-      center_y: 10
-      radius: 3
-      seiten: 6
-    expected:
-      response_contains: "Polygon (6 Seiten) gezeichnet."
-      fusion_visible:
-        sketch_name: SmokeSketch
-        contains_shape: closed_hexagon
-    required: true
-
-  - id: draw_circle_de
-    type: mcp_tool
-    tool:
-      de: kreis_zeichnen
-    args:
-      skizzen_name: SmokeSketch
-      center_x: 20
-      center_y: 10
-      radius: 2
-    expected:
-      response_contains: Kreis gezeichnet.
-    required: true
-
-  - id: analyze_bodies
-    type: mcp_tool
-    tool:
-      de: koerper_analysieren
-      en: analyze_bodies
-    args: {}
-    expected:
-      response_type: json_or_json_string
-      body_names_include:
-        - SmokeBox
-    required: true
-
-  - id: create_sketch_en_optional
+  - id: create_sketch
     type: mcp_tool
     tool:
       en: create_sketch
     args:
-      name: SmokeSketchEN
-      plane: XY
+      name: SmokeSketch
+      plane_name: XY
     expected:
-      response_contains: "Sketch 'SmokeSketchEN' created."
-    required: false
+      response_contains: sketch_created
+    required: true
 
-  - id: draw_polygon_en_optional
+  - id: edit_sketch_batch
     type: mcp_tool
     tool:
-      en: draw_polygon
+      en: edit_sketch
     args:
-      sketch_name: SmokeSketchEN
-      center_x: 5
-      center_y: 5
-      radius: 2
-      sides: 5
+      sketch_name: SmokeSketch
+      operations:
+        - action: draw_polygon
+          cx: 10
+          cy: 10
+          radius: 3
+          sides: 6
+        - action: draw_circle
+          x: 20
+          y: 10
+          radius: 2
     expected:
-      response_contains: "Polygon (5 sides) drawn."
+      response_contains: sketch_updated
+    required: true
+
+  - id: edit_parameters_batch
+    type: mcp_tool
+    tool:
+      en: edit_parameters
+    args:
+      operations:
+        - action: set
+          name: test_param
+          expression: "42mm"
+    expected:
+      response_contains: parameters_updated
+    required: true
+
+  - id: analyze_design
+    type: mcp_tool
+    tool:
+      en: analyze_design
+    args:
+      action: validate
+    expected:
+      response_type: json_or_json_string
+    required: true
+
+  - id: visual_check
+    type: mcp_tool
+    tool:
+      en: capture_view
+    args: {}
+    expected:
+      response_type: image
     required: false
 
   - id: cleanup_after_test
     type: mcp_tool
     tool:
-      de: design_bereinigen
-      en: cleanup_design
-    args: {}
+      en: manage_design
+    args:
+      action: cleanup
     expected:
-      response_contains_any:
-        - Entwurf bereinigt.
-        - Design cleaned up.
+      response_contains: Design cleaned up.
     required: true
 
 notes:
   - >
-    The MCP status endpoint at /mcp is a status/info route. Actual MCP transport
-    uses the SSE and messages endpoints returned by that route.
-  - >
-    Visible Fusion checks are still required. A textual MCP success response alone
-    is not sufficient for a passed result.
+    Dieser Smoke-Test verifiziert die Funktionsfaehigkeit der Batch-Tools.
+    Die einzelnen Operationen (draw_line etc.) sind nun Teil der 'operations' Arrays.

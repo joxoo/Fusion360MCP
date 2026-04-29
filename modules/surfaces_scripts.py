@@ -218,3 +218,59 @@ def build_thicken_surface_script() -> str:
     else: returnValue.append("ERR_BODY")
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_edit_surfaces_script() -> str:
+    return """
+try:
+    results = []
+    for op in params.get('operations', []):
+        action = op.get('action')
+        try:
+            if action == 'patch':
+                s, owner_comp, err = resolve_sketch_context(op['sketch'], op.get('component_name'), op.get('component_path'))
+                if s and s.profiles.count > 0:
+                    patches = owner_comp.features.patchFeatures
+                    p_in = patches.createInput(s.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                    p_feat = patches.add(p_in)
+                    results.append(f"{action}:OK:{p_feat.bodies.item(0).name}")
+                else: results.append(f"{action}:ERR_SKETCH")
+            elif action == 'offset':
+                target = find_body_recursive(root, op['body'])
+                if target:
+                    faces = adsk.core.ObjectCollection.create()
+                    for f in target.faces: faces.add(f)
+                    offsets = target.parentComponent.features.offsetFeatures
+                    o_in = offsets.createInput(faces, adsk.core.ValueInput.createByReal(op['dist']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                    o_feat = offsets.add(o_in)
+                    results.append(f"{action}:OK:{o_feat.bodies.item(0).name}")
+                else: results.append(f"{action}:ERR_BODY")
+            elif action == 'stitch':
+                tools = adsk.core.ObjectCollection.create()
+                for name in op['body_names']:
+                    t = find_body_recursive(root, name)
+                    if t: tools.add(t)
+                if tools.count > 0:
+                    stitches = tools.item(0).parentComponent.features.stitchFeatures
+                    s_in = stitches.createInput(tools, adsk.core.ValueInput.createByReal(op.get('tol', 0.1)), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                    s_feat = stitches.add(s_in)
+                    results.append(f"{action}:OK:{s_feat.bodies.item(0).name}")
+                else: results.append(f"{action}:ERR_MIN_SURFACES")
+            elif action == 'thicken':
+                target = find_body_recursive(root, op['body'])
+                if target:
+                    thickens = target.parentComponent.features.thickenFeatures
+                    face = target.faces.item(0)
+                    t_in = thickens.createInput(face, adsk.core.ValueInput.createByReal(op['thick']), False, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                    t_feat = thickens.add(t_in)
+                    results.append(f"{action}:OK:{t_feat.bodies.item(0).name}")
+                else: results.append(f"{action}:ERR_BODY")
+            else:
+                results.append(f"{action}:ERR_UNKNOWN_ACTION")
+        except Exception as e:
+            results.append(f"{action}:ERR:{str(e)}")
+    returnValue.append(",".join(results) if results else "OK")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")
+"""
+

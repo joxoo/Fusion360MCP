@@ -1,16 +1,14 @@
-# FusionMCP Smoke-Test fuer KI-Agenten
+# FusionMCP Smoke-Test fuer KI-Agenten (Batch-Architektur)
 
 ## Ziel
-Dieser Smoke-Test prueft in wenigen Minuten, ob die wichtigsten Pfade von FusionMCP funktionieren:
+Dieser Smoke-Test prueft in wenigen Minuten, ob die wichtigsten Pfade der konsolidierten FusionMCP Batch-Architektur funktionieren:
 - Bridge erreichbar
 - MCP erreichbar
-- neuer Entwurf
-- Bereinigung
-- Basis-Geometrie
-- lokalisierte Skizzen-Tools
-- einfache Analyse-Rueckgabe
-
-Der Smoke-Test ist bewusst klein. Er soll schnell zeigen, ob das System grundsaetzlich lauffaehig ist.
+- Design Management (Cleanup)
+- Geometrie-Batching (apply_3d_features)
+- Skizzen-Batching (edit_sketch)
+- Parameter-Batching (edit_parameters)
+- Analyse-Rueckgabe
 
 ## Voraussetzungen
 - Fusion 360 laeuft.
@@ -19,129 +17,52 @@ Der Smoke-Test ist bewusst klein. Er soll schnell zeigen, ob das System grundsae
 
 ## Erfolgskriterium
 Der Smoke-Test ist bestanden, wenn:
-- alle Schritte ohne Parameterfehler durchlaufen
-- mindestens ein Body in Fusion erzeugt wurde
-- mindestens eine Skizze mit Polygon erfolgreich erstellt wurde
-- die Analyse-Rueckgabe plausibles JSON oder strukturierte Koerperdaten liefert
+- alle Batch-Schritte ohne Parameterfehler durchlaufen
+- die Box via `apply_3d_features` erzeugt wurde
+- die Skizze mit mehreren Primitiven via `edit_sketch` aktualisiert wurde
+- die Analyse-Rueckgabe plausible Daten liefert
 
 ## Schritt 1: Bridge pruefen
-
-```bash
-curl -s http://localhost:8082
-```
-
-Erwartet:
-- JSON mit Online-Status
+`curl -s http://localhost:8082`
+Erwartet: JSON mit Online-Status
 
 ## Schritt 2: MCP pruefen
+`curl -s http://localhost:8081/mcp`
+Erwartet: JSON mit `status: "mcp_server_online"`
 
-```bash
-curl -s http://localhost:8081/mcp
-```
+## Schritt 3: Bereinigen & Management
+`manage_design(action="cleanup")`
+Erwartet: `Design cleaned up.`
 
-Erwartet:
-- JSON mit `status: "mcp_server_online"`
+## Schritt 4: Geometrie erzeugen (Batch)
+`apply_3d_features(operations=[{"action": "create_box", "l": 10, "w": 10, "h": 5, "name": "SmokeBox"}])`
+Erwartet: `geometry_updated`
 
-## Schritt 3: Neuer Entwurf
+## Schritt 5: Skizze erzeugen & bearbeiten (Batch)
+1. `create_sketch(name="SmokeSketch", plane_name="XY")`
+2. `edit_sketch(sketch_name="SmokeSketch", operations=[{"action": "draw_polygon", "cx": 10, "cy": 10, "radius": 3, "sides": 6}, {"action": "draw_circle", "x": 20, "y": 10, "radius": 2}])`
+Erwartet: `sketch_created` und `sketch_updated`
 
-```text
-neue_konstruktion()
-```
+## Schritt 6: Parameter setzen (Batch)
+`edit_parameters(operations=[{"action": "set", "name": "smoke_param", "expression": "10mm"}])`
+Erwartet: `parameters_updated`
 
-Erwartet:
-- `Dokument erstellt.`
+## Schritt 7: Analyse
+`analyze_design(action="validate")`
+Erwartet: Plausible Design-Daten (JSON)
 
-## Schritt 4: Bereinigen
-
-```text
-design_bereinigen()
-```
-
-Erwartet:
-- `Entwurf bereinigt.`
-
-## Schritt 5: Box erzeugen
-
-```text
-box_erstellen(l=10, w=10, h=5, name="SmokeBox", x=0, y=0, z=0)
-```
-
-Erwartet:
-- `Box 'SmokeBox' erstellt.`
-- in Fusion sichtbar: Body `SmokeBox`
-
-## Schritt 6: Skizze erzeugen
-
-```text
-skizze_erstellen(name="SmokeSketch", ebene="XY")
-```
-
-Erwartet:
-- `Skizze 'SmokeSketch' erstellt.`
-
-## Schritt 7: Polygon zeichnen
-
-```text
-polygon_zeichnen(skizzen_name="SmokeSketch", center_x=10, center_y=10, radius=3, seiten=6)
-```
-
-Erwartet:
-- `Polygon (6 Seiten) gezeichnet.`
-- in Fusion sichtbar: geschlossenes Sechseck in `SmokeSketch`
-
-## Schritt 8: Kreis zeichnen
-
-```text
-kreis_zeichnen(skizzen_name="SmokeSketch", center_x=20, center_y=10, radius=2)
-```
-
-Erwartet:
-- `Kreis gezeichnet.`
-
-## Schritt 9: Koerper analysieren
-
-```text
-koerper_analysieren()
-```
-
-Erwartet:
-- JSON oder strukturierte Daten mit mindestens einem Body
-- `SmokeBox` sollte enthalten sein
-
-## Schritt 10: Optionaler EN-Alias-Check
-
-```text
-create_sketch(name="SmokeSketchEN", plane="XY")
-draw_polygon(sketch_name="SmokeSketchEN", center_x=5, center_y=5, radius=2, sides=5)
-```
-
-Erwartet:
-- `Sketch 'SmokeSketchEN' created.`
-- `Polygon (5 sides) drawn.`
-
-## Schritt 11: Aufraeumen
-
-```text
-cleanup_design()
-```
-
-Erwartet:
-- `Design cleaned up.`
+## Schritt 8: Aufraeumen
+`manage_design(action="cleanup")`
+Erwartet: `Design cleaned up.`
 
 ## Ergebnisformat
 Der Agent soll so berichten:
-
 ```text
-[PASS|FAIL] FusionMCP Smoke-Test
+[PASS|FAIL] FusionMCP Smoke-Test (Batch)
 - Bridge:
 - MCP:
-- Erzeugte Bodies:
-- Erzeugte Skizzen:
+- Erzeugte Bodies (Batch):
+- Skizzen-Operationen (Batch):
+- Parameter-Status:
 - Analyseantwort:
-- Auffaelligkeiten:
 ```
-
-## Abbruchregeln
-- Wenn schon Schritt 1 oder 2 fehlschlaegt, Test sofort abbrechen.
-- Wenn `box_erstellen` fehlschlaegt, keine spaeteren Geometrieaussagen treffen.
-- Wenn `skizze_erstellen` funktioniert, aber `polygon_zeichnen` fehlschlaegt, Fehler als Skizzen-/Alias-Pfad markieren.

@@ -24,6 +24,7 @@ from modules.sketch_scripts import (
     build_draw_ellipse_script,
     build_sketch_mirror_script,
     build_sketch_trim_script,
+    build_edit_sketch_script,
 )
 
 SKETCH_ERROR_MAP = {
@@ -122,7 +123,7 @@ def draw_line_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float
 def draw_circle_logic(sketch_name: str, x: float, y: float, radius: float, lang: str = "en"):
     """Draws a circle in a specific sketch."""
     try:
-        res = execute_fusion_script(build_draw_circle_logic_script() if hasattr(res, 'build_draw_circle_logic_script') else build_draw_circle_script(), {"sketch": sketch_name, "x": x, "y": y, "r": radius}, use_common=["find_body"])
+        res = execute_fusion_script(build_draw_circle_script(), {"sketch": sketch_name, "x": x, "y": y, "r": radius}, use_common=["find_body"])
         return _handle_sketch_result(res, lang, "circle_drawn")
     except FusionBridgeError as e: return bridge_error_message(e)
 
@@ -209,21 +210,17 @@ def draw_slot_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float
         return _handle_sketch_result(res, lang, "slot_drawn")
     except FusionBridgeError as e: return bridge_error_message(e)
 
+def edit_sketch_logic(sketch_name: str, operations: list[dict], lang: str = "en"):
+    """
+    Executes multiple drawing operations in a single sketch.
+    Each operation should be a dict with an 'action' key and required parameters.
+    Supported actions: draw_line, draw_circle, draw_rectangle, draw_polygon, add_constraint.
+    """
+    try:
+        res = execute_fusion_script(build_edit_sketch_script(), {"sketch": sketch_name, "operations": operations}, use_common=["find_body"])
+        return _handle_sketch_result(res, lang, "sketch_updated", name=sketch_name)
+    except FusionBridgeError as e: return bridge_error_message(e)
+
 def register_sketch_tools(mcp):
-    register_tool(mcp, "add_constraint", add_constraint_logic)
     register_tool(mcp, "create_sketch", create_sketch_logic)
-    register_tool(mcp, "draw_line", draw_line_logic)
-    register_tool(mcp, "draw_circle", draw_circle_logic)
-    register_tool(mcp, "draw_rectangle", draw_rectangle_logic)
-    register_tool(mcp, "sketch_polygon", draw_polygon_logic)
-    register_tool(mcp, "sketch_arc", draw_arc_logic)
-    register_tool(mcp, "sketch_spline", draw_spline_logic)
-    register_tool(mcp, "sketch_slot", draw_slot_logic)
-    register_tool(mcp, "sketch_circular_pattern", create_sketch_circular_pattern_logic)
-    register_tool(mcp, "sketch_rectangular_pattern", create_sketch_rectangular_pattern_logic)
-    register_tool(mcp, "sketch_offset", create_sketch_offset_logic)
-    register_tool(mcp, "sketch_project", sketch_project_logic)
-    register_tool(mcp, "draw_sketch_text", draw_sketch_text_logic)
-    register_tool(mcp, "draw_ellipse", draw_ellipse_logic)
-    register_tool(mcp, "sketch_mirror", sketch_mirror_logic)
-    register_tool(mcp, "sketch_trim", sketch_trim_logic)
+    register_tool(mcp, "edit_sketch", edit_sketch_logic)

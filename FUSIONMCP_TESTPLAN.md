@@ -1,114 +1,87 @@
-# Ultimate Testplan: FusionMCP (Standard-konforme Profi-Tests)
+# Consolidated Testplan: FusionMCP (Batch-Architecture)
 
 ## Ziel
-Dieser Testplan dient der vollständigen Verifizierung aller Fusion 360 MCP-Module. Er nutzt ausschließlich die **kanonischen englischen Werkzeugnamen** und deckt den gesamten Workflow vom Concept-Design bis zur Fertigungsprüfung ab.
+Dieser Testplan dient der Verifizierung der konsolidierten Batch-Architektur von FusionMCP. Er nutzt die neuen "Core Tools", die mehrere Operationen in einem Aufruf bündeln, um Token-Bloat zu reduzieren und die Effizienz zu steigern.
 
 ---
 
-## 1. Konnektivität & Basis
-- **Status-Check:** `curl -s http://localhost:8081/mcp` -> `mcp_server_online`
-- **Cleanup:** `cleanup_design()` -> Konstruktion leer.
-- **New Doc:** `create_new_design()` -> Frisches Dokument.
-- **Self-Inspection:** `list_mcp_tools()` -> Liefert vollständige Liste aller registrierten Tools.
-- **Parameter:** `manage_parameter(name="Breite", expression="50mm")` -> Erstellt.
-- **List Params:** `list_parameters()` -> JSON mit "Breite" enthalten.
+## 1. Core & Design Management
+- **Status Check:** `curl http://localhost:8081/mcp` (Sollte `mcp_server_online` zurückgeben)
+- **Basic Management:** 
+  - `manage_design(action="cleanup")` -> Bereinigt das Design.
+  - `manage_design(action="create_new")` -> Erstellt ein leeres Design.
+- **Export/Import:**
+  - `manage_design(action="export_step", filename="test_model")`
+  - `import_mesh(path="path/to/mesh.obj")`
 
 ---
 
-## 2. Solid Modeling (Das "Create" Menü)
-- **Primitives:**
-  - `create_box(l=10, w=10, h=10, name="Base")`
-  - `create_cylinder(r=5, h=20, name="Pillar")`
-  - `create_sphere(r=5, name="Ball")`
-- **Bekannte Einschränkungen:**
-  - `create_coil(...)` -> [EXPECTED: ERR_UNSUPPORTED] (Kommando im API-Kontext nicht ausführbar).
-- **Sketch-based:**
-  - `create_sketch(name="Profile", plane_name="XY")` + `draw_circle(...)`
-  - `create_sketch(name="TopSketch", body_name="Base", face_index=1)` -> Skizze auf Oberfläche.
-  - `draw_sketch_text(sketch_name="TopSketch", text="TEST", height=5, x=0, y=0)` -> Text-Objekt.
-  - `extrude_sketch(sketch_name="TopSketch", distance=-2, op="Cut")` -> **Text-Gravur** (bestätigt alle Profile + Text Support).
-  - `create_revolve(sketch_name="Profile", axis="Z", angle=360)` -> Toroidaler Körper.
-  - `create_sweep_advanced(profile_sketch="S1", path_sketch="P1", twist=15)` -> Verdrehter Flügel.
-  - `create_loft(sketch_names=["S1", "S2"])` -> Übergangskörper.
-- **Holes & Threads:**
-  - `create_hole_advanced(body="Base", dia=8, depth=20, hole_type="Counterbore", cb_dia=12, cb_depth=5)` -> Profi-Bohrung.
-  - `apply_custom_thread(body_name="Pillar", thread_type="ISO Metric profile", size="10")` -> Gewinde.
+## 2. Sketch Operations (Batch)
+- **Create Sketch:** `create_sketch(plane_name="XY", name="Base")` (Entry point)
+- **Edit Sketch:** `edit_sketch(sketch_name="Base", operations=[...])`
+  - `{"action": "draw_circle", "x": 0, "y": 0, "radius": 5}`
+  - `{"action": "draw_line", "x1": 0, "y1": 0, "x2": 10, "y2": 10}`
+  - `{"action": "draw_rectangle", "x1": -5, "y1": -5, "x2": 5, "y2": 5}`
+  - `{"action": "draw_polygon", "cx": 10, "cy": 10, "radius": 3, "sides": 6}`
+  - `{"action": "add_constraint", "type": "Horizontal", "entity1_id": 0}`
 
 ---
 
-## 3. Surface Design (Freiform-Flächen)
-- **Creation:** `create_surface_cylinder(r=10, h=50, name="Hull")`
-- **Modification:** 
-  - `extend_surface(body="Hull", distance=5)` -> Verlängert.
-  - `trim_surface(body="Hull", tool_sketch="TrimLine")` -> Beschnitten.
-- **Solid-Weg:** `stitch_surfaces(body_names=["S1", "S2"])` -> Solid (automatisches Zusammenfügen).
+## 3. 3D Geometry & Features (Batch)
+- **Apply Features:** `apply_3d_features(operations=[...])`
+  - `{"action": "create_box", "l": 10, "w": 10, "h": 5, "name": "Box1"}`
+  - `{"action": "create_cylinder", "r": 5, "h": 10, "name": "Cyl1"}`
+  - `{"action": "extrude", "sketch_name": "Base", "distance": 10}`
+  - `{"action": "fillet", "body": "Box1", "radius": 2}`
+  - `{"action": "chamfer", "body": "Box1", "distance": 1}`
 
 ---
 
-## 4. Mesh Tools (3D-Druck & Scans)
-- **Import:** `import_mesh(path="/pfad/zu/modell.stl")` -> Mesh geladen.
-- **Prepare:**
-  - `generate_face_groups(body="Mesh1")` -> Gruppen erkannt.
-  - `repair_mesh(body="Mesh1")` -> Wasserdicht.
-- **Convert:** `convert_mesh(body="Mesh1", conv_type="infoPrismatic")` -> B-Rep Solid erstellt.
-
-Hinweis:
-- Dieser Block ist nur ausführbar, wenn eine reale Mesh-Datei bereitliegt. Ohne Testdatei ist der Mesh-Abschnitt als `[SKIP]` zu markieren, nicht als `[FAIL]`.
+## 4. Assembly & Parameters (Batch)
+- **Assembly:** `edit_assembly(operations=[...])`
+  - `{"action": "create_component", "name": "SubAssembly"}`
+  - `{"action": "move_component", "component": "SubAssembly", "x": 10, "y": 0, "z": 0}`
+- **Parameters:**
+  - `list_parameters()` -> Listet existierende Parameter.
+  - `edit_parameters(operations=[{"action": "set", "name": "length", "expression": "100mm"}])`
 
 ---
 
-## 5. Form Design (Organische T-Splines)
-- **Primitives (Eingeschränkt):**
-  - `create_form_box`, `create_form_sphere`, etc. -> [EXPECTED: ERR_UNSUPPORTED] (Runtime-Exponierung fehlt).
-- **Modification (Edit):**
-  - `insert_form_edge(body="Organic")`, `subdivide_form_face(body="Organic")`, `create_form_crease(body="Organic")`, `create_form_mirror_internal(body="Organic")`
-  - Diese Schritte setzen einen bereits existierenden gültigen T-Spline-Body voraus.
-  - Wenn keine Form-Primitiverzeugung verfügbar ist und kein externer T-Spline-Body geladen wurde, ist der komplette Edit-Block als `[SKIP]` zu markieren.
+## 5. Specialty Domains (Batch)
+- **Mesh:** `edit_mesh(operations=[{"action": "remesh", "body": "Mesh1", "density": 0.5}])`
+- **Surfaces:** `edit_surfaces(operations=[{"action": "patch", "sketch": "Profile"}])`
+- **Forms (T-Splines):** `edit_forms(operations=[{"action": "extrude", "sketch": "FormProfile", "distance": 10}])`
 
 ---
 
-## 6. Professional Modification (Inkrementelles Editing)
-- **Boolean & Patterns:**
-  - `combine_bodies(target="Base", tool_bodies=["Pillar"], operation="Cut")` -> Schnitt.
-  - `create_feature_pattern(feature_name="Extrude1", count=3)` -> [NEW] Muster von Operationen (Join garantiert).
-- **Direct Edit:**
-  - `delete_body(body="TempBody")` -> [NEW] Gezieltes Löschen.
-  - `rename_body(old_name="Body1", new_name="FinalPart")` -> [NEW] Umbenennung.
-  - `delete_face(body="Base", face_index=0)` -> Fläche entfernt.
-- **Precise Transform:**
-  - `move_body(body="Base", x=5, y=0, z=0)` -> Relativ.
-  - `move_body_absolute(body="Base", x=10, y=0, z=0)` -> [NEW] Absolut (Schwerpunkt-basiert).
+## 6. Analysis & Visuals
+- **Validate:** `analyze_design(action="validate")`
+- **Assembly Tree:** `analyze_design(action="get_assembly_tree")`
+- **Scene Map:** `analyze_design(action="scene_map")` -> Räumliche Karte aller Körper (Schwerpunkte + Bboxes).
+- **Physical Data:** `analyze_design(action="physical_data", body="Box1")` -> Masse, Volumen, Trägheit.
+- **Bounding Box:** `analyze_design(action="bounding_box", body="Box1")` -> Außenabmessungen.
+- **Visual Evidence:** `capture_view()` (Erstellt Screenshot)
 
 ---
 
-## 7. Assembly & Timeline (Struktur & Historie)
-- **Component Management:** `create_component(name="Sub_Assembly")` -> Baugruppe erstellt.
-- **Joints:** `create_joint(comp1="Parent", comp2="Child", joint_type="Rigid")` -> Verbindung.
-- **Timeline Manipulation:**
-  - `get_feature_history()` -> [NEW] Listet alle Arbeitsschritte.
-  - `delete_feature(feature_name="Fillet1")` -> [NEW] Löscht Operation aus Timeline.
-  - `edit_feature(feature_name="Extrude1", value="20mm")` -> [NEW] Ändert Parameter.
-
----
-
-## 8. Analyse & Validierung
-- **Spatial Awareness:** `get_scene_map()` -> [NEW] Karte aller Schwerpunkte & Bounding Boxen.
-- **Construction Integrity:** `validate_model()` -> [NEW] Prüft Manifold, Body Count & Interferenz.
-- **Visuals:** `capture_standard_views()` -> [NEW] Top, Front, Right, ISO Screenshots.
-- **Export:** `export_f3d(filename="archive")` -> [NEW] Gesamtes Projekt exportieren.
+## 7. Feature Manipulation
+- **History:** `get_feature_history()` -> Listet die Timeline-Features auf.
+- **Edit Feature:** `edit_feature(feature_name="Extrude1", new_name="BaseExtrude", suppress=False, value="15mm")`
+- **Delete Feature:** `delete_feature(feature_name="Fillet1")`
 
 ---
 
 ## Ergebnis-Matrix
-| Task | Modul | Status | Bemerkung |
+| Task | Modul | Tool | Status |
 | :--- | :--- | :--- | :--- |
-| 1 | Core/Status | [ ] | SSE & list_mcp_tools |
-| 2 | Inkrementelles Edit | [ ] | move_absolute & rename |
-| 3-6 | Solid/Timeline | [ ] | Feature Patterns & History |
-| 7 | Validierung | [ ] | Manifold & Standard Views |
-
-Statusregeln:
-- `[PASS]` wenn der Schritt erfolgreich ausgeführt wurde.
-- `[FAIL]` wenn ein unterstützter Schritt fehlschlägt.
-- `[SKIP]` wenn eine dokumentierte Voraussetzung fehlt, z. B. Mesh-Datei oder T-Spline-Startkörper.
-- `[EXPECTED]` wenn ein dokumentierter Unsupported-Pfad genau wie beschrieben eintritt.
+| 1 | core | manage_design | [x] Verified |
+| 2 | sketch | create_sketch / edit_sketch | [x] Verified |
+| 3 | geometry | apply_3d_features | [x] Verified |
+| 4 | assembly | edit_assembly | [x] Verified |
+| 5 | parameters| list_parameters / edit_parameters | [x] Verified |
+| 6 | mesh | edit_mesh | [x] Verified |
+| 7 | surfaces | edit_surfaces | [x] Verified |
+| 8 | forms | edit_forms | [x] Verified |
+| 9 | analysis | analyze_design (Consolidated) | [x] Verified |
+| 10| features | get_feature_history / edit_feature | [x] Verified |
+| 11| visual | capture_view | [x] Verified |

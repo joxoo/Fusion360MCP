@@ -170,7 +170,12 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                 except Exception as e:
                     err_msg = traceback.format_exc()
                     app.log(f"Script Error: {err_msg}")
-                    last_result = {"status": "error", "data": None, "error": err_msg, "detail": None}
+                    last_result = {
+                        "status": "error",
+                        "data": exec_globals.get('returnValue'),
+                        "error": err_msg,
+                        "detail": None
+                    }
                     add_to_log(f"Result: Error - {err_msg}")
                 
                 task_queue.task_done()
@@ -205,7 +210,7 @@ class BridgeHttpHandler(BaseHTTPRequestHandler):
                 if last_result["status"] == "success":
                     res = BridgeResponse.success(last_result["data"], last_result.get("detail"))
                 else:
-                    res = BridgeResponse.error(last_result["error"])
+                    res = BridgeResponse.error(last_result["error"], last_result.get("data"))
 
             self.send_response(200)
             self.send_header('Content-type', 'application/json')

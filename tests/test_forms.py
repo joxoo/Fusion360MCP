@@ -1,127 +1,22 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from modules.forms import (
-    create_form_box_logic,
-    create_form_sphere_logic,
-    create_form_cylinder_logic,
-    create_form_plane_logic,
-    create_form_torus_logic,
-    create_form_extrude_logic,
-    create_form_revolve_logic,
-    create_form_sweep_logic,
-    create_form_loft_logic,
-    insert_form_edge_logic,
-    subdivide_form_face_logic,
-    create_form_crease_logic,
-    create_form_mirror_internal_logic,
-    clear_form_symmetry_logic,
-    set_form_display_mode_logic,
-    fill_form_hole_logic,
-    convert_form_logic
-)
+from modules.forms import edit_forms_logic
 from core.utils import load_i18n
 
 class TestForms(unittest.TestCase):
     def setUp(self):
         load_i18n()
 
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_extrude_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["FormBody1"]}
-        res = create_form_extrude_logic("S1", 5.0, False, "en")
-        self.assertEqual(res, "Form extrude created: FormBody1")
-        params = mock_exec.call_args[0][1]
-        self.assertEqual(params['sketch'], "S1")
-        self.assertEqual(params['dist'], 5.0)
-        self.assertIsNone(params['component_name'])
+    @patch('core.bridge.requests.post')
+    def test_edit_forms_batch(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["extrude:OK:Form1"]}
+        mock_post.return_value = mock_response
 
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_sweep_component_scope(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["FormBody2"]}
-        res = create_form_sweep_logic("Profile", "Path", "en", component_path="Root/Sub")
-        self.assertEqual(res, "Form sweep created: FormBody2")
-        params = mock_exec.call_args[0][1]
-        self.assertEqual(params['component_path'], "Root/Sub")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_loft_owner_mismatch(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["ERR_OWNER_MISMATCH"]}
-        res = create_form_loft_logic(["S1", "S2"], "en")
-        self.assertEqual(res, "Entities belong to different components. Cross-component operations are limited.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_set_form_display_mode_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["OK"]}
-        res = set_form_display_mode_logic("Form1", "Box", "en")
-        self.assertEqual(res, "Display mode for 'Form1' set to Box.")
-        params = mock_exec.call_args[0][1]
-        self.assertEqual(params['mode'], "Box")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_fill_form_hole_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["OK"]}
-        res = fill_form_hole_logic("Form1", "en")
-        self.assertEqual(res, "Hole filled in 'Form1'.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_convert_form_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["OK"]}
-        res = convert_form_logic("Form1", "en")
-        self.assertEqual(res, "Form 'Form1' successfully converted to solid.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_mirror_internal_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["OK"]}
-        res = create_form_mirror_internal_logic("Form1", "en")
-        self.assertEqual(res, "Internal mirror symmetry created in 'Form1'.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_insert_form_edge_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["OK"]}
-        res = insert_form_edge_logic("Form1", "en")
-        self.assertEqual(res, "Edge inserted into 'Form1'.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_sphere_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["FormSphere1"]}
-        res = create_form_sphere_logic(10, 0, 0, 0, 8, 8, "en")
-        self.assertEqual(res, "Form sphere 'FormSphere1' created.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_sphere_unsupported(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
-        res = create_form_sphere_logic(10, 0, 0, 0, 8, 8, "en")
-        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_box_params(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["FormBox1"]}
-        res = create_form_box_logic(10, 10, 10, 0, 0, 0, 2, 2, 2, "en")
-        self.assertEqual(res, "Form box 'FormBox1' created.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_box_unsupported(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
-        res = create_form_box_logic(10, 10, 10, 0, 0, 0, 2, 2, 2, "en")
-        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_cylinder_unsupported(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
-        res = create_form_cylinder_logic(5, 10, 0, 0, 0, 4, 8, "en")
-        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_plane_unsupported(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
-        res = create_form_plane_logic(10, 10, 0, 0, 0, 2, 2, "en")
-        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
-
-    @patch('modules.forms.execute_fusion_script')
-    def test_create_form_torus_unsupported(self, mock_exec):
-        mock_exec.return_value = {"status": "success", "data": ["ERR_UNSUPPORTED"]}
-        res = create_form_torus_logic(10, 2, 0, 0, 0, 8, 8, "en")
-        self.assertEqual(res, "Error: T-Spline primitive creation is not exposed by the current Fusion API/runtime.")
+        ops = [{"action": "extrude", "sketch": "Sketch1", "dist": 5.0}]
+        res = edit_forms_logic(ops, "en")
+        self.assertEqual(res, "Forms (T-Splines) updated successfully.")
 
 if __name__ == '__main__':
     unittest.main()

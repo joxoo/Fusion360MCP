@@ -1,5 +1,31 @@
 import json
 
+def build_get_feature_history_script() -> str:
+    return """import json
+try:
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    timeline = design.timeline
+    history = []
+    for i in range(timeline.count):
+        item = timeline.item(i)
+        feat_type = "Unknown"
+        try:
+            if item.entity:
+                feat_type = item.entity.objectType.split('::')[-1]
+        except: pass
+        
+        history.append({
+            "index": i,
+            "name": item.name,
+            "feature_type": feat_type,
+            "is_suppressed": item.isSuppressed,
+            "is_rolled_back": i >= timeline.markerPosition
+        })
+    returnValue.append(json.dumps(history))
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
 def build_get_volumetric_properties_script() -> str:
     return """import json
 try:
@@ -228,3 +254,75 @@ try:
     returnValue.append(json.dumps(tree))
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_analyze_design_script() -> str:
+    return """
+import json, base64, os, tempfile
+try:
+    action = params.get('action', 'validate')
+    if action == 'get_assembly_tree':
+        def get_comp_info(comp, path):
+            info = {"name": comp.name, "path": path, "bodies": [b.name for b in comp.bRepBodies], "sketches": [s.name for s in comp.sketches], "components": []}
+            for occ in comp.occurrences: info["components"].append(get_comp_info(occ.component, f"{path}/{occ.name}"))
+            return info
+        returnValue.append(json.dumps(get_comp_info(root, "Root")))
+    elif action == 'capture_view':
+        view = app.activeViewport
+        path = os.path.join(tempfile.gettempdir(), 'fusion_cap.png')
+        view.saveAsImageFile(path, 800, 600)
+        with open(path, 'rb') as f: returnValue.append(base64.b64encode(f.read()).decode('utf-8'))
+        os.remove(path)
+    elif action == 'validate':
+        results = {"body_count": root.bRepBodies.count, "interferences": 0, "manifold_issues": []}
+        all_bodies = adsk.core.ObjectCollection.create()
+        for b in root.bRepBodies:
+            all_bodies.add(b)
+            if not b.isSolid: results["manifold_issues"].append(b.name)
+        if root.bRepBodies.count > 1:
+            results["interferences"] = adsk.fusion.Design.cast(app.activeProduct).analyzeInterference(adsk.fusion.Design.cast(app.activeProduct).createInterferenceInput(all_bodies)).count
+        returnValue.append(json.dumps(results))
+    elif action == 'scene_map':
+        scene_map = []
+        for b in root.bRepBodies:
+            bbox = b.boundingBox
+            center = b.physicalProperties.centerOfMass
+            scene_map.append({
+                "name": b.name,
+                "center": {"x": center.x, "y": center.y, "z": center.z},
+                "bbox": {
+                    "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
+                    "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
+                    "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
+                },
+                "is_visible": b.isVisible
+            })
+        returnValue.append(json.dumps(scene_map))
+    elif action == 'physical_data':
+        target = find_body_recursive(root, params.get('body'))
+        if target:
+            props = target.physicalProperties
+            res, ixx, iyy, izz, ixy, iyz, ixz = props.getXYZMomentsOfInertia()
+            returnValue.append(json.dumps({
+                "name": target.name, "mass_kg": props.mass, "volume_cm3": props.volume,
+                "density_kg_cm3": props.density, "area_cm2": props.area,
+                "moments_of_inertia": {"ixx": ixx, "iyy": iyy, "izz": izz, "ixy": ixy, "iyz": iyz, "ixz": ixz}
+            }))
+        else: returnValue.append("ERR_BODY")
+    elif action == 'bounding_box':
+        target = find_body_recursive(root, params.get('body'))
+        if target:
+            bbox = target.boundingBox
+            returnValue.append(json.dumps({
+                "name": target.name,
+                "min": {"x": bbox.minPoint.x, "y": bbox.minPoint.y, "z": bbox.minPoint.z},
+                "max": {"x": bbox.maxPoint.x, "y": bbox.maxPoint.y, "z": bbox.maxPoint.z},
+                "size": {"l": bbox.maxPoint.x - bbox.minPoint.x, "w": bbox.maxPoint.y - bbox.minPoint.y, "h": bbox.maxPoint.z - bbox.minPoint.z}
+            }))
+        else: returnValue.append("ERR_BODY")
+    else:
+        returnValue.append("ERR_UNKNOWN_ACTION")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")
+"""
+
