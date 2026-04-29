@@ -10,6 +10,7 @@ import sys
 import io
 import contextlib
 import urllib.request
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -86,8 +87,6 @@ mcp_port = 8081
 command_history = []
 MAX_LOG_ENTRIES = 20
 handlers = []
-KEEP_MCP_SERVER_RUNNING_ON_ADDIN_STOP = True
-
 def add_to_log(msg):
     global command_history
     timestamp = datetime.now().strftime('%H:%M:%S')
@@ -130,6 +129,7 @@ class McpCommandHandler(adsk.core.CustomEventHandler):
                     'traceback': traceback, 'returnValue': [],
                     'params': params,
                     'start_mcp_server': start_mcp_server,
+                    'restart_mcp_server': restart_mcp_server,
                     'stop_mcp_process': stop_mcp_process
                 }
                 
@@ -319,7 +319,7 @@ def is_mcp_server_healthy():
     except:
         return False
 
-def start_mcp_server():
+def start_mcp_server(force_restart=False):
     global mcp_process, mcp_host, mcp_port
     try:
         addon_dir = os.path.dirname(__file__)
@@ -328,14 +328,26 @@ def start_mcp_server():
         if mcp_process and mcp_process.poll() is not None:
             mcp_process = None
 
+        if force_restart and mcp_process:
+            stop_mcp_process(wait=True)
+
         if is_mcp_server_healthy():
-            add_to_log(f'MCP Server already running on {mcp_host}:{mcp_port}; reusing existing process.')
+            if force_restart:
+                add_to_log(f'MCP restart requested, but an external MCP is still healthy on {mcp_host}:{mcp_port}.')
+            else:
+                add_to_log(f'MCP Server already running on {mcp_host}:{mcp_port}; reusing existing process.')
             return
 
         if mcp_process:
-            stop_mcp_process()
+            if force_restart:
+                stop_mcp_process(wait=True)
+            else:
+                stop_mcp_process()
 
-        cleanup_mcp_port(force=False)
+        if force_restart:
+            cleanup_mcp_port(force=True)
+        else:
+            cleanup_mcp_port(force=False)
         
         server_script = os.path.join(addon_dir, 'fusion_mcp_server.py')
         req_file = os.path.join(addon_dir, 'requirements.txt')
@@ -361,17 +373,35 @@ def start_mcp_server():
     except Exception as e:
         add_to_log(f'Failed to start MCP Server: {str(e)}')
 
-def stop_mcp_process():
+def restart_mcp_server():
+    start_mcp_server(force_restart=True)
+
+
+def stop_mcp_process(wait=False, timeout=5.0):
     global mcp_process
     if mcp_process:
+        process = mcp_process
         try:
-            if os.name == 'nt':
-                os.kill(mcp_process.pid, signal.CTRL_BREAK_EVENT)
-            else:
-                os.killpg(os.getpgid(mcp_process.pid), signal.SIGTERM)
+            if process.poll() is None:
+                if os.name == 'nt':
+                    os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+                else:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         except:
-            try: mcp_process.kill()
+            try:
+                process.kill()
             except: pass
+        if wait:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                if process.poll() is not None:
+                    break
+                time.sleep(0.1)
+            if process.poll() is None:
+                try:
+                    process.kill()
+                except:
+                    pass
         mcp_process = None
         add_to_log('MCP Server stopped.')
 
@@ -497,13 +527,9 @@ def stop(context):
                 http_server = None
             threading.Thread(target=shutdown_and_close).start()
 
-        if KEEP_MCP_SERVER_RUNNING_ON_ADDIN_STOP:
-            add_to_log('Fusion add-in stopped. Leaving MCP Server running so external clients stay connected.')
-            mcp_status_msg = 'FusionMCP add-in stopped; MCP server kept alive.'
-        else:
-            stop_mcp_process()
-            cleanup_mcp_port(force=True) # Last-resort cleanup only when explicitly shutting down our own server
-            mcp_status_msg = 'FusionMCP add-in stopped; MCP server shut down.'
+        stop_mcp_process(wait=True)
+        cleanup_mcp_port(force=True) # Last-resort cleanup when shutting down our own server
+        mcp_status_msg = 'FusionMCP add-in stopped; MCP server shut down.'
 
         if custom_event: app.unregisterCustomEvent(EVENT_ID)
         cmd_def = ui.commandDefinitions.itemById(CMD_ID)

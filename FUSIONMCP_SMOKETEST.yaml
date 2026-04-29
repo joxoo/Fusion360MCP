@@ -19,6 +19,7 @@ success_criteria:
   - All batch steps complete without parameter errors
   - Box is created via apply_3d_features
   - Sketch with multiple shapes (polygon, circle) is created via edit_sketch
+  - Export works via export_model
   - Analysis returns plausible data
 
 steps:
@@ -52,6 +53,18 @@ steps:
       response_contains_any:
         - Entwurf bereinigt.
         - Design cleaned up.
+    required: true
+
+  - id: restart_mcp
+    type: mcp_tool
+    tool:
+      en: manage_design
+    args:
+      action: restart_mcp
+    expected:
+      response_contains_any:
+        - MCP restart command sent.
+        - MCP-Neustart-Befehl gesendet.
     required: true
 
   - id: create_box_batch
@@ -114,6 +127,17 @@ steps:
           expression: "42mm"
     expected:
       response_contains: parameters_updated
+    required: true
+
+  - id: export_step_model
+    type: mcp_tool
+    tool:
+      en: export_model
+    args:
+      format: step
+      filename: smoke_test_model
+    expected:
+      response_contains: Exported to
     required: true
 
   - id: analyze_design

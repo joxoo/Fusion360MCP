@@ -10,7 +10,7 @@ except Exception as e:
 
 
 def build_restart_mcp_script() -> str:
-    return "start_mcp_server(); returnValue.append('OK')"
+    return "restart_mcp_server(); returnValue.append('OK')"
 
 
 def build_create_new_design_script() -> str:
@@ -67,7 +67,7 @@ try:
         
         returnValue.append("OK")
     elif action == 'restart_mcp':
-        start_mcp_server()
+        restart_mcp_server()
         returnValue.append("OK")
     elif action == 'create_new':
         app.documents.add(0)
@@ -91,5 +91,4 @@ try:
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-
 

@@ -8,6 +8,9 @@ class TestMechanicalValidation(unittest.TestCase):
         script = build_create_bolt_script()
         self.assertIn("if body and body.isValid:", script)
         self.assertIn('returnValue.append("ERR_VERIFICATION_FAILED")', script)
+        self.assertIn("adsk.fusion.FeatureOperations.NewBodyFeatureOperation", script)
+        self.assertIn("cyl_faces = [f for f in body.faces if f.geometry and f.geometry.surfaceType == adsk.core.SurfaceTypes.CylinderSurfaceType]", script)
+        self.assertIn("face = max(cyl_faces, key=lambda f: f.area, default=None)", script)
 
     def test_create_gear_script_verifies_created_body_lookup(self):
         script = build_spur_gear_script()

@@ -10,8 +10,11 @@ Dieser Testplan dient der Verifizierung der konsolidierten Batch-Architektur von
 - **Basic Management:** 
   - `manage_design(action="cleanup")` -> Bereinigt das Design.
   - `manage_design(action="create_new")` -> Erstellt ein leeres Design.
+  - `manage_design(action="restart_mcp")` -> Startet den MCP-Kindprozess neu und laedt aktuelle Aenderungen.
 - **Export/Import:**
-  - `manage_design(action="export_step", filename="test_model")`
+  - `export_model(format="step", filename="test_model")`
+  - `export_model(format="stl", filename="test_model")`
+  - `export_model(format="f3d", filename="test_archive")`
   - `import_mesh(path="path/to/mesh.obj")`
 
 ---
@@ -30,7 +33,7 @@ Dieser Testplan dient der Verifizierung der konsolidierten Batch-Architektur von
 ## 3. 3D Geometry & Features (Batch)
 - **Apply Features:** `apply_3d_features(operations=[...])`
   - `{"action": "create_box", "l": 10, "w": 10, "h": 5, "name": "Box1"}`
-  - `{"action": "create_cylinder", "r": 5, "h": 10, "name": "Cyl1"}`
+  - `{"action": "create_cylinder", "radius": 5, "height": 10, "name": "Cyl1"}`
   - `{"action": "extrude", "sketch": "Base", "dist": 10 }`
   - `{"action": "fillet", "body": "Box1", "radius": 2}`
   - `{"action": "chamfer", "body": "Box1", "distance": 1}`
@@ -48,6 +51,9 @@ Dieser Testplan dient der Verifizierung der konsolidierten Batch-Architektur von
 ---
 
 ## 5. Specialty Domains (Batch)
+- **Threads:** `apply_custom_thread(body_name="Cyl1", thread_type="ISO Metric profile", size="10", designation="M10x1.5")`
+- **Mechanical:** `create_bolt(diameter_mm=10, length_cm=3)` / `create_gear(num_teeth=20, module=2)`
+- **Advanced Geometry:** `create_loft(sketch_names=["Profile1", "Profile2"])`, `create_sweep(profile_sketch="Prof", path_sketch="Path")`
 - **Mesh:** `edit_mesh(operations=[{"action": "remesh", "body": "Mesh1", "density": 0.5}])`
 - **Surfaces:** `edit_surfaces(operations=[{"action": "patch", "sketch": "Profile"}])`
 - **Forms (T-Splines):** `edit_forms(operations=[{"action": "extrude", "sketch": "FormProfile", "distance": 10}])`
@@ -75,10 +81,14 @@ Dieser Testplan dient der Verifizierung der konsolidierten Batch-Architektur von
 | Task | Modul | Tool | Status |
 | :--- | :--- | :--- | :--- |
 | 1 | core | manage_design | [x] Verified |
+| 1a | export | export_model | [x] Verified |
 | 2 | sketch | create_sketch / edit_sketch | [x] Verified |
 | 3 | geometry | apply_3d_features | [x] Verified |
 | 4 | assembly | edit_assembly | [x] Verified |
 | 5 | parameters| list_parameters / edit_parameters | [x] Verified |
+| 5a | threads | apply_custom_thread | [x] Exposed |
+| 5b | mechanical | create_bolt / create_gear | [x] Exposed |
+| 5c | advanced_geometry | create_loft / create_sweep / get_center_of_mass | [x] Exposed |
 | 6 | mesh | edit_mesh | [x] Verified |
 | 7 | surfaces | edit_surfaces | [x] Verified |
 | 8 | forms | edit_forms | [x] Verified |

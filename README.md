@@ -1,4 +1,4 @@
-# FusionMCP (v9.0.3)
+# FusionMCP (v9.2.0)
 
 FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It enables AI agents to interact directly with the Fusion 360 API to perform complex design, geometry, and mechanical engineering tasks.
 
@@ -12,9 +12,18 @@ FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It e
     - `create_sketch`: Supports creating sketches on planes (XY, XZ, YZ) or directly on body faces (via `body_name` and `face_index`).
     - `extrude_sketch`: Supports extruding all sketch profiles, including **SketchText**. Includes support for operations (`Join`, `Cut`, `NewBody`, `NewComponent`), start `offset`, and targeted body selection.
   - **Mechanical**: Specialized tools for holes, grooves, and mechanical features.
-  - **Export**: Automated STL and F3D export capabilities.
+  - **Advanced Geometry**: Loft, sweep, appearance, distance, and center-of-mass tools are exposed again in the MCP server.
+  - **Export**: Unified `export_model` tool for `stl`, `f3d`, and `step`.
   - **Analysis**: Real-time physical data and body analysis.
   - **Threads**: Support for standard and custom thread application.
+
+## Recent Changes
+
+- `export_model(format="stl|f3d|step", filename=...)` is now the single exposed export tool.
+- `apply_3d_features` accepts `height` aliases for `Box` and `Cylinder`, and `center` aliases for `Cylinder`.
+- `manage_design(action="restart_mcp")` now performs a real MCP restart instead of reusing the previous healthy process.
+- Stopping the Fusion add-in now also stops the MCP child process.
+- `create_bolt` uses a more robust cylindrical face selection for thread creation.
 
 ## Installation
 

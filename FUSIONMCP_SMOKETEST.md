@@ -20,6 +20,7 @@ Der Smoke-Test ist bestanden, wenn:
 - alle Batch-Schritte ohne Parameterfehler durchlaufen
 - die Box via `apply_3d_features` erzeugt wurde
 - die Skizze mit mehreren Primitiven via `edit_sketch` aktualisiert wurde
+- der Export via `export_model` funktioniert
 - die Analyse-Rueckgabe plausible Daten liefert
 
 ## Schritt 1: Bridge pruefen
@@ -34,24 +35,32 @@ Erwartet: JSON mit `status: "mcp_server_online"`
 `manage_design(action="cleanup")`
 Erwartet: `Design cleaned up.`
 
-## Schritt 4: Geometrie erzeugen (Batch)
+## Schritt 4: MCP Restart pruefen
+`manage_design(action="restart_mcp")`
+Erwartet: `MCP restart command sent.`
+
+## Schritt 5: Geometrie erzeugen (Batch)
 `apply_3d_features(operations=[{"action": "create_box", "l": 10, "w": 10, "h": 5, "name": "SmokeBox"}])`
 Erwartet: `geometry_updated`
 
-## Schritt 5: Skizze erzeugen & bearbeiten (Batch)
+## Schritt 6: Skizze erzeugen & bearbeiten (Batch)
 1. `create_sketch(name="SmokeSketch", plane_name="XY")`
 2. `edit_sketch(sketch_name="SmokeSketch", operations=[{"action": "draw_polygon", "cx": 10, "cy": 10, "radius": 3, "sides": 6}, {"action": "draw_circle", "x": 20, "y": 10, "radius": 2}])`
 Erwartet: `sketch_created` und `sketch_updated`
 
-## Schritt 6: Parameter setzen (Batch)
+## Schritt 7: Parameter setzen (Batch)
 `edit_parameters(operations=[{"action": "set", "name": "smoke_param", "expression": "10mm"}])`
 Erwartet: `parameters_updated`
 
-## Schritt 7: Analyse
+## Schritt 8: Export pruefen
+`export_model(format="step", filename="smoke_test_model")`
+Erwartet: Rueckgabe `Exported to ...`
+
+## Schritt 9: Analyse
 `analyze_design(action="validate")`
 Erwartet: Plausible Design-Daten (JSON)
 
-## Schritt 8: Aufraeumen
+## Schritt 10: Aufraeumen
 `manage_design(action="cleanup")`
 Erwartet: `Design cleaned up.`
 
@@ -61,8 +70,10 @@ Der Agent soll so berichten:
 [PASS|FAIL] FusionMCP Smoke-Test (Batch)
 - Bridge:
 - MCP:
+- Restart:
 - Erzeugte Bodies (Batch):
 - Skizzen-Operationen (Batch):
 - Parameter-Status:
+- Export:
 - Analyseantwort:
 ```

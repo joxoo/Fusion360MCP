@@ -7,7 +7,6 @@ from modules.advanced_geometry_scripts import (
     build_measure_distance_script,
     build_get_center_of_mass_script,
     build_apply_appearance_script,
-    build_export_step_script,
 )
 
 def create_loft_logic(sketch_names: list, lang: str = "en", component_name: str = None, component_path: str = None):
@@ -88,17 +87,9 @@ def apply_appearance_logic(body: str, appearance: str, lang: str = "en"):
         return f"Appearance '{appearance}' applied to {body}."
     except FusionBridgeError as e: return bridge_error_message(e)
 
-def export_step_logic(filename: str = "model", lang: str = "en"):
-    """Exports the current design as a STEP file."""
-    try:
-        res = execute_fusion_script(build_export_step_script(), {"filename": filename})
-        return get_result_value(res, "Error")
-    except FusionBridgeError as e: return bridge_error_message(e)
-
 def register_advanced_geometry_tools(mcp):
     register_tool(mcp, "create_loft", create_loft_logic)
     register_tool(mcp, "create_sweep", create_sweep_logic)
     register_tool(mcp, "measure_distance", measure_distance_logic)
     register_tool(mcp, "get_center_of_mass", get_center_of_mass_logic)
     register_tool(mcp, "apply_appearance", apply_appearance_logic)
-    register_tool(mcp, "export_step", export_step_logic)

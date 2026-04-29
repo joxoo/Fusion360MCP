@@ -9,6 +9,7 @@ from modules.advanced_geometry import (
 )
 from core.utils import load_i18n
 
+
 class TestAdvancedGeometry(unittest.TestCase):
     def setUp(self):
         load_i18n()
@@ -21,7 +22,7 @@ class TestAdvancedGeometry(unittest.TestCase):
         mock_post.return_value = mock_response
 
         res = create_loft_logic(["S1", "S2"], "en")
-        
+
         self.assertEqual(res, "Loft created: Loft1")
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['sketch_names'], ["S1", "S2"])
@@ -37,7 +38,7 @@ class TestAdvancedGeometry(unittest.TestCase):
         mock_post.return_value = mock_response
 
         res = create_sweep_logic("Prof", "Path", "en")
-        
+
         self.assertEqual(res, "Sweep created: Sweep1")
         params = mock_post.call_args[1]['json']['payload']['params']
         self.assertEqual(params['profile_sketch'], "Prof")
@@ -76,7 +77,7 @@ class TestAdvancedGeometry(unittest.TestCase):
 
         res = measure_distance_logic("Body1", "Body2", "en")
         self.assertEqual(res, "Distance: 5.2345 cm")
-        
+
         script = mock_post.call_args[1]['json']['payload']['script']
         self.assertIn("meas.measure(b1, b2)", script)
 
@@ -90,18 +91,6 @@ class TestAdvancedGeometry(unittest.TestCase):
         res = get_center_of_mass_logic("Body1", "en")
         self.assertEqual(res, "Center of Mass (X,Y,Z): 1.0,2.0,3.0")
 
-    @patch('core.bridge.requests.post')
-    def test_export_step_params(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"status": "success", "data": ["Exported to path/test.step"]}
-        mock_post.return_value = mock_response
-
-        from modules.advanced_geometry import export_step_logic
-        res = export_step_logic("test", "en")
-        self.assertIn("Exported to", res)
-        params = mock_post.call_args[1]['json']['payload']['params']
-        self.assertEqual(params['filename'], "test")
 
 if __name__ == '__main__':
     unittest.main()

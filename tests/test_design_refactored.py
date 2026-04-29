@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from modules.design import manage_design_logic
+from modules.design_scripts import build_manage_design_script
 from core.utils import load_i18n
 
 class TestDesign(unittest.TestCase):
@@ -16,6 +17,11 @@ class TestDesign(unittest.TestCase):
 
         res = manage_design_logic("cleanup", "en")
         self.assertEqual(res, "Design cleaned up.")
+
+    def test_manage_design_restart_uses_real_restart_helper(self):
+        script = build_manage_design_script()
+        self.assertIn("restart_mcp_server()", script)
+        self.assertNotIn("start_mcp_server()", script)
 
 if __name__ == '__main__':
     unittest.main()

@@ -8,10 +8,15 @@ def build_create_bolt_script() -> str:
         s = target_comp.sketches.add(target_comp.xYConstructionPlane)
         s.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(0, 0, 0), radius_cm)
         prof = s.profiles.item(0)
-        ext = target_comp.features.extrudeFeatures.addSimple(prof, adsk.core.ValueInput.createByReal(params['length']), 0)
+        ext = target_comp.features.extrudeFeatures.addSimple(
+            prof,
+            adsk.core.ValueInput.createByReal(params['length']),
+            adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+        )
         body = ext.bodies.item(0)
         threads = target_comp.features.threadFeatures
-        face = next((f for f in body.faces if f.geometry.surfaceType == adsk.core.SurfaceTypes.CylinderSurfaceType), None)
+        cyl_faces = [f for f in body.faces if f.geometry and f.geometry.surfaceType == adsk.core.SurfaceTypes.CylinderSurfaceType]
+        face = max(cyl_faces, key=lambda f: f.area, default=None)
         if face:
             q = threads.threadDataQuery
             t_type = 'ISO Metric profile'

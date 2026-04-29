@@ -52,6 +52,17 @@ class TestGeometry(unittest.TestCase):
         self.assertIn('returnValue.append(",".join(results) if results else "OK")', script)
         self.assertNotIn("TRACE:", script)
 
+    def test_apply_3d_features_script_supports_cylinder_alias_fields(self):
+        script = build_apply_3d_features_script()
+        self.assertIn("center_coords = op.get('center', [0,0,0])", script)
+        self.assertIn("op.get('x', center_coords[0])", script)
+        self.assertIn("h = float(op.get('height', op.get('h', 0)))", script)
+
+    def test_apply_3d_features_script_supports_box_height_alias(self):
+        script = build_apply_3d_features_script()
+        self.assertIn("h = float(op.get('height', op.get('h', 0)))", script)
+        self.assertIn("createByReal(h), 3", script)
+
     def test_create_box_script_verifies_created_body(self):
         script = build_create_box_script()
         self.assertIn("if find_body_recursive(root, body.name):", script)

@@ -1065,7 +1065,8 @@ try:
                 s = active_comp.sketches.add(active_comp.xYConstructionPlane)
                 s.sketchCurves.sketchLines.addTwoPointRectangle(pt, adsk.core.Point3D.create(pt.x + op['l'], pt.y + op['w'], 0))
                 if s.profiles.count > 0:
-                    box = active_comp.features.extrudeFeatures.addSimple(s.profiles.item(0), adsk.core.ValueInput.createByReal(op['h']), 3)
+                    h = float(op.get('height', op.get('h', 0)))
+                    box = active_comp.features.extrudeFeatures.addSimple(s.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
                     body = box.bodies.item(0)
                     translate_body(body, op.get('x', 0), op.get('y', 0), op.get('z', 0))
                     body.name = op.get('name', 'Box')
@@ -1076,11 +1077,13 @@ try:
                 else: results.append(f"{action}:ERR_NO_PROFILE")
 
             elif action == 'create_cylinder' or action == 'Cylinder':
-                center = adsk.core.Point3D.create(op.get('x', 0), op.get('y', 0), op.get('z', 0))
+                center_coords = op.get('center', [0,0,0])
+                center = adsk.core.Point3D.create(op.get('x', center_coords[0]), op.get('y', center_coords[1]), op.get('z', center_coords[2]))
                 sk = active_comp.sketches.add(active_comp.xYConstructionPlane)
                 r = float(op.get('radius', op.get('r', 0)))
+                h = float(op.get('height', op.get('h', 0)))
                 sk.sketchCurves.sketchCircles.addByCenterRadius(center, r)
-                ext = active_comp.features.extrudeFeatures.addSimple(sk.profiles.item(0), adsk.core.ValueInput.createByReal(op['h']), 3)
+                ext = active_comp.features.extrudeFeatures.addSimple(sk.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
                 body = ext.bodies.item(0); body.name = op.get('name', 'Cylinder')
                 if find_body_recursive(active_comp, body.name):
                     results.append(f"{action}:OK:{body.name}")

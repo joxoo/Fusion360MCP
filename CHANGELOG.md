@@ -2,6 +2,26 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [9.2.0] - 2026-04-29
+### Hinzugefügt
+- **Einheitlicher Export:** Neues MCP-Tool `export_model` fuer `stl`, `f3d` und `step`.
+- **Reaktivierte MCP-Module:** `advanced_geometry`, `export`, `mechanical` und `threads` werden wieder im MCP-Server registriert.
+- **Regressionstests:** Zusätzliche Abdeckung fuer Export-Konsolidierung, Batch-Alias-Felder und robustere Bolt-/Restart-Pfade.
+
+### Geaendert
+- **Export-API:** Die bisherigen Einzel-Export-Tools wurden auf ein gemeinsames `export_model`-Interface konsolidiert.
+- **Batch-Geometrie:** `apply_3d_features` akzeptiert nun `height` fuer `Box` und `Cylinder` sowie `center` fuer `Cylinder`.
+- **MCP-Neustart:** `manage_design(action="restart_mcp")` beendet den bekannten MCP-Kindprozess jetzt wirklich und startet ihn frisch neu.
+- **Plugin-Stopp:** Beim Stoppen des Fusion-Add-ins wird der MCP-Prozess nun immer mit beendet, statt auf ein fehleranfälliges Reuse-Verhalten zu setzen.
+- **Bolt-Erzeugung:** `create_bolt` extrudiert explizit als `NewBody` und waehlt die groesste zylindrische Flaeche fuer das Gewinde.
+- **Testdokumentation:** Testplan und Smoke-Test wurden auf `export_model`, den echten Restart-Pfad und die aktuellen Batch-Parameter aktualisiert.
+
+### Behoben
+- **Batch-Boxen:** `apply_3d_features` wirft bei `Box`-Payloads mit `height` statt `h` keinen `ERR:'h'`-Fehler mehr.
+- **Batch-Zylinder:** `apply_3d_features` verarbeitet `height`/`center`-Aliasfelder fuer `Cylinder` konsistent.
+- **MCP-Code-Reload:** Aenderungen am MCP-Server werden nach `restart_mcp` wieder zuverlaessig geladen.
+- **Bolt-Threading:** Das automatische Finden der Gewindeflaeche bei `create_bolt` ist robuster.
+
 ## [9.1.0] - 2026-04-27
 ### Hinzugefügt
 - **Text-Extrusion:** `extrude_sketch` unterstützt nun die Extrusion von `SketchText`-Objekten. Text wird automatisch in die Profilsammlung aufgenommen.

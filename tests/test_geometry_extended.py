@@ -30,6 +30,8 @@ class TestGeometryExtended(unittest.TestCase):
         self.assertIn('dia_val = float(params[\'dia_mm\'])', script)
         self.assertIn('adsk.fusion.ThreadInfo.create', script)
         self.assertIn('target_comp.features.threadFeatures', script)
+        self.assertIn('adsk.fusion.FeatureOperations.NewBodyFeatureOperation', script)
+        self.assertIn('face = max(cyl_faces, key=lambda f: f.area, default=None)', script)
 
     @patch('core.bridge.requests.post')
     def test_create_gear_solid_logic(self, mock_post):
