@@ -109,6 +109,8 @@ class TestExtrudeSketchScript(unittest.TestCase):
         self.assertIn("adsk.core.ObjectCollection.create()", script)
         self.assertIn("adsk.fusion.FeatureOperations.CutFeatureOperation", script)
         self.assertIn("adsk.fusion.FeatureOperations.JoinFeatureOperation", script)
+        self.assertIn("pick_body_name(params, 'Extrude', params.get('sketch'))", script)
+        self.assertIn("ensure_unique_body_name(owner_comp", script)
 
 if __name__ == '__main__':
     unittest.main()

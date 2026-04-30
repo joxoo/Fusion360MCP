@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from core.utils import format_response, register_tool, load_i18n
+from core.utils import COMMON_FUSION_SCRIPTS, format_response, register_tool, load_i18n
 from core.error_handler import get_result_value, localized_error, map_result_error
 import inspect
 from modules.sketch import draw_slot_logic, create_sketch_circular_pattern_logic, create_sketch_rectangular_pattern_logic, create_sketch_offset_logic
@@ -170,6 +170,13 @@ class TestUtils(unittest.TestCase):
     def test_error_handler_passthroughs_unknown_err_codes(self):
         res = map_result_error("ERR_SOMETHING", "en", {})
         self.assertEqual(res, "ERR_SOMETHING")
+
+    def test_find_body_common_script_prefers_exact_component_path_segments(self):
+        script = COMMON_FUSION_SCRIPTS["find_body"]
+        self.assertIn("exact_segment = normalize_name(segment)", script)
+        self.assertIn("if occ_name == exact_segment or comp_name == exact_segment:", script)
+        self.assertIn("if match:", script)
+        self.assertIn("continue", script)
 
 if __name__ == '__main__':
     unittest.main()

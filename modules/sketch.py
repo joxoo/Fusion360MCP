@@ -31,6 +31,22 @@ SKETCH_ERROR_MAP = {
     "ERR_SKETCH": localized_error("sketch_not_found"),
     "ERR_SKETCH_NOT_FOUND": localized_error("sketch_not_found"),
     "ERR_NOT_FOUND": "Error: Target body or sketch not found.",
+    "ERR_BODY": localized_error("body_not_found"),
+    "ERR_CURVE_INDEX_REQUIRED": "Error: curve_index is required for this sketch action.",
+    "ERR_CURVE_NOT_FOUND": "Error: Target sketch curve not found.",
+    "ERR_CURVE_SELECTION_REQUIRED": "Error: Select at least one sketch curve for this action.",
+    "ERR_MIRROR_AXIS_REQUIRED": "Error: mirror_curve_index or mirror_curve_ref is required for mirror_entities.",
+    "ERR_MIRROR_AXIS_INVALID": "Error: The mirror axis must reference a valid sketch line.",
+    "ERR_CONSTRAINT_INDEX_REQUIRED": "Error: constraint_index is required for this sketch action.",
+    "ERR_CONSTRAINT_NOT_FOUND": "Error: Target sketch constraint not found.",
+    "ERR_CONSTRAINT_NOT_DELETABLE": "Error: This sketch constraint cannot be deleted.",
+    "ERR_DIMENSION_INDEX_REQUIRED": "Error: dimension_index is required for this sketch action.",
+    "ERR_DIMENSION_NOT_FOUND": "Error: Target sketch dimension not found.",
+    "ERR_DIMENSION_NOT_DELETABLE": "Error: This sketch dimension cannot be deleted.",
+    "ERR_INVALID_ENTITY": "Error: The selected sketch entities are not valid for this action.",
+    "ERR_UNKNOWN_CONSTRAINT_TYPE": "Error: Unknown sketch constraint type.",
+    "ERR_UNKNOWN_DIMENSION_TYPE": "Error: Unknown sketch dimension type.",
+    "ERR_EMPTY": "Error: The sketch does not contain editable geometry for this action.",
 }
 
 def _handle_sketch_result(res, lang: str, success_key: str, **kwargs):
@@ -211,15 +227,67 @@ def draw_slot_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float
         return _handle_sketch_result(res, lang, "slot_drawn")
     except FusionBridgeError as e: return bridge_error_message(e)
 
-def edit_sketch_logic(sketch_name: str, operations: list[dict], lang: str = "en"):
+def edit_sketch_logic(
+    sketch_name: str = None,
+    operations: list[dict] = None,
+    lang: str = "en",
+    sketch_ref: dict = None,
+    component_name: str = None,
+    component_path: str = None,
+):
     """
     Executes multiple drawing operations in a single sketch.
     Each operation should be a dict with an 'action' key and required parameters.
-    Supported actions: draw_line, draw_circle, draw_rectangle, draw_polygon, add_constraint.
+    Supported actions include additive and corrective sketch edits such as
+    draw_line, draw_circle, draw_rectangle, draw_polygon, draw_arc, draw_spline,
+    draw_slot, draw_ellipse, project_geometry, offset, circular_pattern,
+    rectangular_pattern, delete_curve, move_entities, copy_entities,
+    mirror_entities,
+    set_construction, trim, clear_sketch, add_constraint, remove_constraint,
+    add_dimension, set_dimension, and delete_dimension. The target sketch can
+    be passed either as sketch_name or as sketch_ref from
+    analyze_design/get_assembly_tree.
     """
     try:
-        res = execute_fusion_script(build_edit_sketch_script(), {"sketch": sketch_name, "operations": operations}, use_common=["find_body"])
-        return _handle_sketch_result(res, lang, "sketch_updated", name=sketch_name)
+        sketch_ref = sketch_ref or {}
+        resolved_sketch_name = sketch_name or sketch_ref.get("sketch") or sketch_ref.get("name")
+        resolved_component_name = component_name or sketch_ref.get("component_name")
+        resolved_component_path = component_path or sketch_ref.get("component_path")
+        operations = operations or []
+
+        res = execute_fusion_script(
+            build_edit_sketch_script(),
+            {
+                "sketch": resolved_sketch_name,
+                "operations": operations,
+                "component_name": resolved_component_name,
+                "component_path": resolved_component_path,
+            },
+            use_common=["find_body"],
+        )
+        val = str(get_result_value(res))
+        if val.startswith("ERR_"):
+            err = map_result_error(val, lang, SKETCH_ERROR_MAP)
+            return err or f"Error: {val}"
+
+        parts = [part for part in val.split(",") if part]
+        issues = []
+        for part in parts:
+            if ":ERR" in part or ":SKIPPED" in part or part.startswith("ERR_"):
+                issues.append(part)
+
+        if issues:
+            mapped = []
+            for issue in issues:
+                issue_text = issue
+                for code, message in SKETCH_ERROR_MAP.items():
+                    if code in issue:
+                        issue_text = f"{issue} -> {message if isinstance(message, str) else message.get('key', code)}"
+                        break
+                mapped.append(issue_text)
+            return f"Error updating sketch '{resolved_sketch_name}': {'; '.join(mapped)}"
+
+        return format_response(lang, "sketch_updated", name=resolved_sketch_name)
     except FusionBridgeError as e: return bridge_error_message(e)
 
 def register_sketch_tools(mcp):

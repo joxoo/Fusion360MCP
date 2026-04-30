@@ -54,8 +54,15 @@ Actions:
 
 Use before editing when you need assembly structure, validation, or scene context.
 
+Rules:
+- Use returned component_path and body_ref fields from analysis results to target existing components and bodies in later edit calls.
+- Prefer body_ref.component_path plus body_ref.body over guessing names from the viewport.
+- For sketch corrections, reuse sketch_ref, curve_ref, constraint_ref, and dimension_ref from get_assembly_tree or validate instead of inventing indices.
+- Use get_feature_history before editing or deleting a feature so later apply_3d_features actions can target an existing feature by name.
+
 Actions:
 - `get_assembly_tree`: required `action`
+- `get_feature_history`: required `action`
 - `validate`: required `action`
 - `scene_map`: required `action`
 - `physical_data`: required `action`
@@ -82,6 +89,7 @@ Rules:
 - Use body_name plus face_index when the sketch must be attached to an existing face.
 - The resolved target component is activated before sketch creation so the sketch lands in the intended assembly context.
 - If component_path is omitted for nested assemblies, Fusion may use the currently active component and place the sketch in the wrong location.
+- Always give new sketches semantic names that describe intent or role. Avoid placeholders like Sketch1, Sketch2, or NewSketch.
 
 Examples:
 ```json
@@ -103,12 +111,37 @@ Examples:
 
 Use to modify one existing sketch with multiple 2D operations in a single call.
 
+Rules:
+- You can target the sketch with sketch_name or reuse sketch_ref from analyze_design.
+- For curve edits such as delete_curve, set_construction, or trim, prefer curve_ref from analyze_design and only fall back to raw curve_index when needed.
+- For constraint and dimension edits, prefer constraint_ref and dimension_ref from analyze_design or validate.
+- When creating a sketch earlier in the workflow, keep its name semantic and stable so later edit_sketch calls can target it reliably.
+
 Actions:
 - `draw_line`: required `x1`, `y1`, `x2`, `y2`
 - `draw_circle`: required `x`, `y`, `r`
 - `draw_rectangle`: required `x1`, `y1`, `x2`, `y2`
 - `draw_polygon`: required `cx`, `cy`, `r`, `sides`
+- `draw_arc`: required `cx`, `cy`, `sx`, `sy`, `angle`
+- `draw_spline`: required `pts`
+- `draw_slot`: required `x1`, `y1`, `x2`, `y2`, `width`
+- `draw_ellipse`: required `cx`, `cy`, `mx`, `my`, `ox`, `oy`
+- `project_geometry`: required `body`
+- `offset`: required `dist`
+- `circular_pattern`: required `cx`, `cy`, `count`
+- `rectangular_pattern`: required `count_x`, `dist_x`
+- `delete_curve`: required `curve_index`
+- `move_entities`: required `curve_indices`, `dx`, `dy`
+- `copy_entities`: required `curve_indices`, `dx`, `dy`
+- `mirror_entities`: required `curve_indices`, `mirror_curve_index`
+- `set_construction`: required `curve_index`
+- `trim`: required `curve_index`, `x`, `y`
+- `clear_sketch`: required none
 - `add_constraint`: required `type`
+- `remove_constraint`: required `constraint_index`
+- `add_dimension`: required `type`
+- `set_dimension`: required `dimension_index`, `value`
+- `delete_dimension`: required `dimension_index`
 
 Examples:
 ```json
@@ -127,6 +160,10 @@ Examples:
       "x": 2,
       "y": 1,
       "r": 0.3
+    },
+    {
+      "action": "delete_curve",
+      "curve_index": 0
     }
   ]
 }
@@ -139,8 +176,10 @@ Use for most solid modeling changes after a sketch exists.
 Rules:
 - Prefer component_path on each operation when working in nested components.
 - Use target_body for Join/Cut when the target body is known.
+- Use get_feature_history from analyze_design before edit_feature or delete_feature so the feature name comes from the actual timeline.
 - Component-aware creation actions activate the resolved target component before creating bodies.
 - If component_path is omitted for nested assemblies, primitive creation may fall back to the wrong active component.
+- Always provide semantic body names for new bodies. Avoid placeholders like Body1, Body2, or NewBody.
 
 Actions:
 - `extrude`: required `sketch`, `dist`
@@ -149,6 +188,18 @@ Actions:
 - `combine`: required `target`, `tools`, `op`
 - `create_box`: required `l`, `w`, `h`, `name`
 - `create_cylinder`: required `r`, `h`, `name`
+- `delete_body`: required `body`
+- `rename_body`: required `body`, `new_name`
+- `move_body`: required `body`
+- `move_body_absolute`: required `body`, `x`, `y`, `z`
+- `scale_body`: required `body`, `factor`
+- `shell`: required `body`, `thick`
+- `split_body`: required `body`, `tool`
+- `delete_face`: required `body`, `face_index`
+- `offset_face`: required `body`, `face_index`, `dist`
+- `move_face`: required `body`, `face_index`
+- `edit_feature`: required `feature_name`
+- `delete_feature`: required `feature_name`
 
 ### `edit_assembly`
 
@@ -159,9 +210,13 @@ Rules:
 - For joints, prefer component1_path and component2_path.
 - Create components first, then use their component paths in later sketch or body creation so activation can target the correct assembly context.
 - After create_component, use the returned or expected component path in later calls instead of relying on the currently active component.
+- Always give components semantic names that describe function or placement. Avoid placeholders like Component1, Component2, or New Component.
 
 Actions:
 - `create_component`: required `action`, `name`
+- `rename_component`: required `action`, `new_name`
+- `delete_component`: required `action`
+- `move_component`: required `action`
 - `create_joint`: required `action`, `type`
 
 ### `edit_surfaces`
@@ -171,6 +226,7 @@ Use for grouped surface operations instead of direct solid modeling tools.
 Rules:
 - Prefer component_path when the action references a sketch in a nested component.
 - Use body_names for stitch and body for offset or thicken.
+- Provide semantic names for newly created surface bodies whenever possible.
 
 Actions:
 - `patch`: required `sketch`
@@ -185,6 +241,7 @@ Use for grouped T-Spline form operations.
 Rules:
 - Use sketch plus dist for form extrusion.
 - Use body for display mode, symmetry, or conversion actions on existing T-Spline bodies.
+- Provide semantic names for newly created form bodies whenever possible.
 
 Actions:
 - `extrude`: required `sketch`, `dist`
@@ -274,6 +331,10 @@ Edit Sketch:
       "x": 2,
       "y": 1,
       "r": 0.3
+    },
+    {
+      "action": "delete_curve",
+      "curve_index": 0
     }
   ]
 }

@@ -13,6 +13,8 @@ from modules.assembly_scripts import (
 ASSEMBLY_ERROR_MAP = {
     "ERR_COMP": localized_error("component_not_found"),
     "ERR_COMPONENT": localized_error("component_not_found"),
+    "ERR_ROOT_COMPONENT": "Error: The root component cannot be edited by this action.",
+    "ERR_NEW_NAME_REQUIRED": "Error: new_name is required for this assembly action.",
 }
 
 
@@ -22,7 +24,14 @@ def _handle_assembly_batch_result(val: str, lang: str):
     if errors:
         mapped_errors = []
         for err_part in errors:
-            mapped = map_result_error(err_part, lang, ASSEMBLY_ERROR_MAP)
+            mapped = None
+            for code, message in ASSEMBLY_ERROR_MAP.items():
+                if code in err_part:
+                    if isinstance(message, dict) and message.get("type") == "i18n":
+                        mapped = format_response(lang, message["key"], **message.get("kwargs", {}))
+                    else:
+                        mapped = message
+                    break
             mapped_errors.append(mapped or err_part)
         return f"Error: Some assembly operations failed: {'; '.join(mapped_errors)}"
     return None
@@ -30,7 +39,8 @@ def _handle_assembly_batch_result(val: str, lang: str):
 def edit_assembly_logic(operations: list[dict], lang: str = "en"):
     """
     Executes multiple assembly operations in a single batch.
-    Supported actions: create_component, create_joint.
+    Supported actions: create_component, create_joint, rename_component,
+    delete_component, move_component.
     Component references should prefer component_path over plain names for nested assemblies.
     Each operation should be a dict with 'action' and required parameters.
     """

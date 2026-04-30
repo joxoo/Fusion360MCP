@@ -2,6 +2,21 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [9.3.0] - 2026-04-30
+### Hinzugefügt
+- **Korrektive Compact-Actions:** `edit_sketch` unterstützt jetzt `move_entities`, `copy_entities` und `mirror_entities`.
+- **Feature-Inspektion im Compact-Profil:** `analyze_design(action="get_feature_history")` liefert Timeline-Daten für spätere Feature-Korrekturen.
+- **Assembly-Korrektur:** `edit_assembly` unterstützt jetzt `move_component`.
+- **Direktmodellierung im Compact-Profil:** `apply_3d_features` unterstützt jetzt `shell`, `split_body`, `delete_face`, `offset_face` und `move_face`.
+- **Feature-Korrektur im Compact-Profil:** `apply_3d_features` unterstützt jetzt `edit_feature` und `delete_feature`.
+
+### Geaendert
+- **AI-Guidance:** Die öffentliche Dokumentation und Action-Guides wurden auf die neuen Compact-Korrekturpfade erweitert.
+- **Batch-Referenzierung:** Sketch-, Feature-, Body- und Komponenten-Korrekturen folgen jetzt konsequenter einem analyse-zuerst Workflow.
+
+### Behoben
+- **Sketch-Mirroring:** Die KI kann Skizzengeometrie nun gezielt um eine referenzierte Achse spiegeln, statt dafür Geometrie neu aufzubauen.
+
 ## [9.2.0] - 2026-04-29
 ### Hinzugefügt
 - **Einheitlicher Export:** Neues MCP-Tool `export_model` fuer `stl`, `f3d` und `step`.

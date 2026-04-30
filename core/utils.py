@@ -186,6 +186,19 @@ def find_component_by_path(root_comp, target_path):
     current = root_comp
     for segment in [part for part in normalized_path.split("/") if part]:
         match = None
+        exact_segment = normalize_name(segment)
+
+        for occ in current.occurrences:
+            occ_name = normalize_name(getattr(occ, 'name', ''))
+            comp_name = normalize_name(get_component_name(occ.component))
+            if occ_name == exact_segment or comp_name == exact_segment:
+                match = occ.component
+                break
+
+        if match:
+            current = match
+            continue
+
         for occ in current.occurrences:
             occ_name = getattr(occ, 'name', '')
             comp_name = get_component_name(occ.component)

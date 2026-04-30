@@ -815,6 +815,26 @@ except Exception as e:
 
 def build_extrude_sketch_script() -> str:
     return """try:
+    def ensure_unique_body_name(owner_comp, desired_name):
+        base_name = str(desired_name or 'Body').strip() or 'Body'
+        candidate = base_name
+        suffix = 2
+        while find_body_recursive(root, candidate):
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        return candidate
+
+    def pick_body_name(payload, fallback_prefix, source_name=None):
+        requested = str(payload.get('name', '') or '').strip()
+        if requested and requested.lower() not in ('body', 'body1', 'body2', 'body3', 'newbody'):
+            return requested
+        source = str(source_name or '').strip().replace(' ', '_')
+        if source:
+            if source.lower().endswith('sketch'):
+                source = source[:-6].rstrip('_') or source
+            return f"{source}_{fallback_prefix}"
+        return fallback_prefix
+
     s, owner_comp, err = resolve_sketch_context(
         params['sketch'],
         params.get('component_name'),
@@ -888,6 +908,7 @@ def build_extrude_sketch_script() -> str:
                 ext = extrudes.add(ext_in)
 
                 if op == adsk.fusion.FeatureOperations.NewBodyFeatureOperation and ext.bodies.count > 0:
+                    ext.bodies.item(0).name = ensure_unique_body_name(owner_comp, pick_body_name(params, 'Extrude', params.get('sketch')))
                     created_name = ext.bodies.item(0).name
                     if find_body_recursive(root, created_name):
                         returnValue.append(created_name)
@@ -1004,6 +1025,111 @@ def build_apply_3d_features_script() -> str:
 try:
     results = []
     ops = params.get('operations', [])
+
+    def ensure_unique_body_name(owner_comp, desired_name):
+        base_name = str(desired_name or 'Body').strip() or 'Body'
+        candidate = base_name
+        suffix = 2
+        while find_body_recursive(root, candidate):
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        return candidate
+
+    def pick_body_name(op, fallback_prefix, source_name=None):
+        requested = str(op.get('name', '') or '').strip()
+        if requested and requested.lower() not in ('body', 'body1', 'body2', 'body3', 'newbody'):
+            return requested
+        source = str(source_name or '').strip()
+        if source:
+            source = source.replace(' ', '_')
+            if source.lower().endswith('sketch'):
+                source = source[:-6].rstrip('_') or source
+            return f"{source}_{fallback_prefix}"
+        return fallback_prefix
+
+    def collect_body_refs(component, sink):
+        comp_path = get_component_path(component)
+        for body in component.bRepBodies:
+            sink.append({
+                'name': body.name,
+                'component_path': comp_path,
+                'label': f"{body.name} @ {comp_path}"
+            })
+        for occ in component.occurrences:
+            collect_body_refs(occ.component, sink)
+
+    def body_lookup_error(target_name, component_name=None, component_path=None):
+        candidates = []
+        scope = resolve_lookup_scope(component_name, component_path)
+        if scope:
+            collect_body_refs(scope, candidates)
+        if (component_name or component_path) and scope != root:
+            collect_body_refs(root, candidates)
+        if not candidates:
+            return f"ERR_BODY_NOT_FOUND (requested='{target_name}')"
+
+        wanted = normalize_name(target_name)
+        folded = ascii_fold_name(target_name)
+        suggestions = []
+        seen = set()
+        for candidate in candidates:
+            dedupe_key = (candidate['name'], candidate['component_path'])
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            candidate_norm = normalize_name(candidate['name'])
+            candidate_folded = ascii_fold_name(candidate['name'])
+            if wanted in candidate_norm or candidate_norm in wanted or folded in candidate_folded or candidate_folded in folded:
+                suggestions.append(candidate['label'])
+        if not suggestions:
+            suggestions = [candidate['label'] for candidate in candidates[:5]]
+        else:
+            suggestions = suggestions[:5]
+        return f"ERR_BODY_NOT_FOUND (requested='{target_name}'; suggestions={' | '.join(suggestions)})"
+
+    def iter_named_features(component):
+        collections = (
+            component.features.extrudeFeatures,
+            component.features.revolveFeatures,
+            component.features.sweepFeatures,
+            component.features.holeFeatures,
+            component.features.filletFeatures,
+            component.features.chamferFeatures,
+            component.features.shellFeatures,
+            component.features.combineFeatures,
+            component.features.splitBodyFeatures,
+            component.features.moveFeatures,
+            component.features.scaleFeatures,
+            component.features.offsetFeatures,
+        )
+        for collection in collections:
+            try:
+                for feature in collection:
+                    yield feature
+            except:
+                pass
+
+    def find_named_feature(feature_name, component_name=None, component_path=None):
+        target_component = resolve_component_context(component_name, component_path)
+        components = [target_component] if target_component else [root]
+        if target_component and target_component != root:
+            components.append(root)
+        for component in components:
+            for feature in iter_named_features(component):
+                if getattr(feature, 'name', None) == feature_name:
+                    return feature, component
+        return None, None
+
+    def body_in_requested_scope(body, component_name=None, component_path=None):
+        if not body:
+            return False
+        if not (component_name or component_path):
+            return True
+        requested_component = resolve_component_context(component_name, component_path)
+        if not requested_component:
+            return False
+        owner = get_owner_component(body)
+        return owner == requested_component
     
     for op in ops:
         action = op.get('action') or op.get('type')
@@ -1023,6 +1149,9 @@ try:
                 ext_in.setDistanceExtent(False, adsk.core.ValueInput.createByReal(op['dist']))
                 ext_feat = exts.add(ext_in)
                 if ext_feat.bodies.count > 0:
+                    if op_type in (3, 4):
+                        body = ext_feat.bodies.item(0)
+                        body.name = ensure_unique_body_name(owner_comp, pick_body_name(op, 'Extrude', op.get('sketch')))
                     results.append(f"{action}:OK")
                 else:
                     results.append(f"{action}:ERR_VERIFICATION_FAILED")
@@ -1073,7 +1202,7 @@ try:
                     box = target_comp.features.extrudeFeatures.addSimple(s.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
                     body = box.bodies.item(0)
                     translate_body(body, op.get('x', 0), op.get('y', 0), op.get('z', 0))
-                    body.name = op.get('name', 'Box')
+                    body.name = ensure_unique_body_name(target_comp, pick_body_name(op, 'Box'))
                     if find_body_recursive(target_comp, body.name):
                         results.append(f"{action}:OK:{body.name}")
                     else:
@@ -1090,7 +1219,7 @@ try:
                 h = float(op.get('height', op.get('h', 0)))
                 sk.sketchCurves.sketchCircles.addByCenterRadius(center, r)
                 ext = target_comp.features.extrudeFeatures.addSimple(sk.profiles.item(0), adsk.core.ValueInput.createByReal(h), 3)
-                body = ext.bodies.item(0); body.name = op.get('name', 'Cylinder')
+                body = ext.bodies.item(0); body.name = ensure_unique_body_name(target_comp, pick_body_name(op, 'Cylinder'))
                 if find_body_recursive(target_comp, body.name):
                     results.append(f"{action}:OK:{body.name}")
                 else:
@@ -1113,13 +1242,212 @@ try:
                     rev_in.isSolid = True
                     rev_in.setAngleExtent(False, adsk.core.ValueInput.createByReal(2 * 3.14159))
                     rev_feat = target_comp.features.revolveFeatures.add(rev_in)
-                    body = rev_feat.bodies.item(0); body.name = op.get('name', 'Sphere')
+                    body = rev_feat.bodies.item(0); body.name = ensure_unique_body_name(target_comp, pick_body_name(op, 'Sphere'))
                     if find_body_recursive(target_comp, body.name):
                         results.append(f"{action}:OK:{body.name}")
                     else:
                         results.append(f"{action}:ERR_VERIFICATION_FAILED")
                 else:
                     results.append(f"{action}:ERR_NO_PROFILE")
+
+            elif action == 'delete_body':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                target_name = target.name
+                deleted = target.deleteMe()
+                if not deleted:
+                    results.append(f"{action}:ERR_DELETE_FAILED")
+                    continue
+                remaining, _, _ = resolve_body_context(target_name, op.get('component_name'), op.get('component_path'))
+                if remaining and body_in_requested_scope(remaining, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:ERR_VERIFICATION_FAILED")
+                else:
+                    results.append(f"{action}:OK")
+
+            elif action == 'rename_body':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                new_name = op.get('new_name')
+                if not new_name:
+                    results.append(f"{action}:ERR_NEW_NAME_REQUIRED")
+                else:
+                    target.name = str(new_name)
+                    results.append(f"{action}:OK:{target.name}")
+
+            elif action == 'move_body':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                transform = adsk.core.Matrix3D.create()
+                transform.translation = adsk.core.Vector3D.create(op.get('x', 0), op.get('y', 0), op.get('z', 0))
+                moves = owner_comp.features.moveFeatures
+                move_input = moves.createInput(ents, transform)
+                moves.add(move_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'move_body_absolute':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                current_center = target.physicalProperties.centerOfMass
+                dx = op['x'] - current_center.x
+                dy = op['y'] - current_center.y
+                dz = op['z'] - current_center.z
+                transform = adsk.core.Matrix3D.create()
+                transform.translation = adsk.core.Vector3D.create(dx, dy, dz)
+                moves = owner_comp.features.moveFeatures
+                move_input = moves.createInput(ents, transform)
+                moves.add(move_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'scale_body':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                scales = owner_comp.features.scaleFeatures
+                origin = owner_comp.originConstructionPoint
+                scale_input = scales.createInput(ents, origin, adsk.core.ValueInput.createByReal(op['factor']))
+                scales.add(scale_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'shell':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                face_index = int(op.get('face_index', 0))
+                if face_index < 0 or face_index >= target.faces.count:
+                    results.append(f"{action}:ERR_FACE_INDEX")
+                    continue
+                face = target.faces.item(face_index)
+                faces = adsk.core.ObjectCollection.create()
+                faces.add(face)
+                shell_input = owner_comp.features.shellFeatures.createInput(faces, False)
+                shell_input.insideThickness = adsk.core.ValueInput.createByReal(op['thick'])
+                owner_comp.features.shellFeatures.add(shell_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'split_body':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                tool_name = str(op.get('tool', '')).strip().upper()
+                tool = {
+                    'XY': owner_comp.xYConstructionPlane,
+                    'XZ': owner_comp.xZConstructionPlane,
+                    'YZ': owner_comp.yZConstructionPlane,
+                }.get(tool_name)
+                if not tool:
+                    tool, tool_owner, tool_err = resolve_body_context(op.get('tool'), op.get('component_name'), op.get('component_path'))
+                    if not tool:
+                        results.append(f"{action}:ERR_TOOL")
+                        continue
+                    if tool_owner != owner_comp or not body_in_requested_scope(tool, op.get('component_name'), op.get('component_path')):
+                        results.append(f"{action}:ERR_OWNER_MISMATCH")
+                        continue
+                split_input = owner_comp.features.splitBodyFeatures.createInput(target, tool, bool(op.get('extend', True)))
+                owner_comp.features.splitBodyFeatures.add(split_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'delete_face':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                face_index = int(op.get('face_index', 0))
+                if face_index < 0 or face_index >= target.faces.count:
+                    results.append(f"{action}:ERR_FACE_INDEX")
+                    continue
+                owner_comp.features.surfaceDeleteFaceFeatures.add(target.faces.item(face_index))
+                results.append(f"{action}:OK")
+
+            elif action == 'offset_face':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                face_index = int(op.get('face_index', 0))
+                if face_index < 0 or face_index >= target.faces.count:
+                    results.append(f"{action}:ERR_FACE_INDEX")
+                    continue
+                faces = adsk.core.ObjectCollection.create()
+                faces.add(target.faces.item(face_index))
+                offset_input = owner_comp.features.offsetFeatures.createInput(
+                    faces,
+                    adsk.core.ValueInput.createByReal(op['dist']),
+                    adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
+                    False
+                )
+                owner_comp.features.offsetFeatures.add(offset_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'move_face':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                face_index = int(op.get('face_index', 0))
+                if face_index < 0 or face_index >= target.faces.count:
+                    results.append(f"{action}:ERR_FACE_INDEX")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target.faces.item(face_index))
+                transform = adsk.core.Matrix3D.create()
+                transform.translation = adsk.core.Vector3D.create(op.get('x', 0), op.get('y', 0), op.get('z', 0))
+                move_input = owner_comp.features.moveFeatures.createInput(ents, transform)
+                owner_comp.features.moveFeatures.add(move_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'edit_feature':
+                feature, feature_owner = find_named_feature(op.get('feature_name'), op.get('component_name'), op.get('component_path'))
+                if not feature:
+                    results.append(f"{action}:ERR_FEATURE_NOT_FOUND")
+                    continue
+                if op.get('new_name') is not None:
+                    try:
+                        feature.name = str(op.get('new_name'))
+                    except:
+                        pass
+                if op.get('suppress') is not None:
+                    try:
+                        feature.isSuppressed = bool(op.get('suppress'))
+                    except:
+                        pass
+                if op.get('value') is not None:
+                    try:
+                        if hasattr(feature, 'extentDefinition'):
+                            feature.extentDefinition.distance.expression = str(op.get('value'))
+                        elif hasattr(feature, 'distance'):
+                            feature.distance.expression = str(op.get('value'))
+                        else:
+                            results.append(f"{action}:ERR_FEATURE_VALUE_UNSUPPORTED")
+                            continue
+                    except Exception as feature_err:
+                        results.append(f"{action}:ERR:{str(feature_err)}")
+                        continue
+                results.append(f"{action}:OK")
+
+            elif action == 'delete_feature':
+                feature, feature_owner = find_named_feature(op.get('feature_name'), op.get('component_name'), op.get('component_path'))
+                if not feature:
+                    results.append(f"{action}:ERR_FEATURE_NOT_FOUND")
+                    continue
+                feature.deleteMe()
+                results.append(f"{action}:OK")
 
             else:
                 results.append(f"{action}:ERR_UNKNOWN_ACTION")

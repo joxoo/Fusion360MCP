@@ -50,6 +50,11 @@ class TestAssembly(unittest.TestCase):
         self.assertIn("create_joint:ERR_COMPONENT", script.replace("{action}:", "create_joint:"))
         self.assertIn("occ.activate()", script)
         self.assertIn("ERR_VERIFICATION_FAILED", script)
+        self.assertIn("rename_component", script)
+        self.assertIn("delete_component", script)
+        self.assertIn("move_component", script)
+        self.assertIn("current_translation", script)
+        self.assertIn("target_component_path", script)
 
     @patch('core.bridge.requests.post')
     def test_edit_assembly_surfaces_batch_errors(self, mock_post):
@@ -63,6 +68,32 @@ class TestAssembly(unittest.TestCase):
 
         self.assertIn("Error: Some assembly operations failed:", res)
         self.assertIn("ERR_VERIFICATION_FAILED", res)
+
+    @patch('core.bridge.requests.post')
+    def test_edit_assembly_reports_rename_component_errors(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["rename_component:ERR_NEW_NAME_REQUIRED"]}
+        mock_post.return_value = mock_response
+
+        ops = [{"action": "rename_component", "target_component_path": "Root/Frame/Arm"}]
+        res = edit_assembly_logic(ops, "en")
+
+        self.assertIn("Error: Some assembly operations failed:", res)
+        self.assertIn("new_name is required", res)
+
+    @patch('core.bridge.requests.post')
+    def test_edit_assembly_reports_move_component_errors(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "data": ["move_component:ERR_COMPONENT"]}
+        mock_post.return_value = mock_response
+
+        ops = [{"action": "move_component", "target_component_path": "Root/Frame/Missing", "x": 1}]
+        res = edit_assembly_logic(ops, "en")
+
+        self.assertIn("Error: Some assembly operations failed:", res)
+        self.assertIn("component not found", res.lower())
 
 if __name__ == '__main__':
     unittest.main()

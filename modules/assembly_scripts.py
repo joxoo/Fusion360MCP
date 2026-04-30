@@ -55,6 +55,50 @@ try:
             return resolve_component_context(legacy_name, None)
         return None
 
+    def normalize_component_path(path_value):
+        if not path_value:
+            return ""
+        path_text = str(path_value).strip().replace("\\\\", "/")
+        if path_text.startswith("/"):
+            path_text = path_text[1:]
+        return path_text
+
+    def resolve_target_occurrence(payload):
+        component_path = normalize_component_path(payload.get('target_component_path') or payload.get('component_path'))
+        component_name = payload.get('target_component_name') or payload.get('component_name')
+
+        if component_path:
+            if component_path == "Root":
+                return None, "ERR_ROOT_COMPONENT"
+            if component_path.startswith("Root/"):
+                component_path = component_path[5:]
+            current = root
+            occurrence = None
+            for segment in [part for part in component_path.split("/") if part]:
+                occurrence = None
+                for occ in current.occurrences:
+                    occ_name = getattr(occ, 'name', '')
+                    comp_name = getattr(occ.component, 'name', '')
+                    if occ_name == segment or comp_name == segment:
+                        occurrence = occ
+                        current = occ.component
+                        break
+                if occurrence is None:
+                    return None, "ERR_COMPONENT"
+            return occurrence, None
+
+        if component_name:
+            if str(component_name).strip() == "Root":
+                return None, "ERR_ROOT_COMPONENT"
+            for occ in root.allOccurrences:
+                occ_name = getattr(occ, 'name', '')
+                comp_name = getattr(occ.component, 'name', '')
+                if occ_name == component_name or comp_name == component_name:
+                    return occ, None
+            return None, "ERR_COMPONENT"
+
+        return None, "ERR_COMPONENT"
+
     results = []
     for op in params.get('operations', []):
         action = op.get('action')
@@ -89,6 +133,44 @@ try:
                     results.append(f"{action}:OK")
                 else:
                     results.append(f"{action}:ERR_COMPONENT")
+            elif action == 'rename_component':
+                occurrence, occ_err = resolve_target_occurrence(op)
+                if occ_err:
+                    results.append(f"{action}:{occ_err}")
+                else:
+                    new_name = op.get('new_name')
+                    if not new_name:
+                        results.append(f"{action}:ERR_NEW_NAME_REQUIRED")
+                    else:
+                        occurrence.component.name = str(new_name)
+                        results.append(f"{action}:OK:{occurrence.component.name}")
+            elif action == 'delete_component':
+                occurrence, occ_err = resolve_target_occurrence(op)
+                if occ_err:
+                    results.append(f"{action}:{occ_err}")
+                else:
+                    occurrence.deleteMe()
+                    results.append(f"{action}:OK")
+            elif action == 'move_component':
+                occurrence, occ_err = resolve_target_occurrence(op)
+                if occ_err:
+                    results.append(f"{action}:{occ_err}")
+                else:
+                    transform = adsk.core.Matrix3D.create()
+                    current_transform = occurrence.transform2 if hasattr(occurrence, 'transform2') else occurrence.transform
+                    transform.copy(current_transform)
+                    current_translation = transform.translation
+                    translation = adsk.core.Vector3D.create(
+                        current_translation.x + float(op.get('x', 0)),
+                        current_translation.y + float(op.get('y', 0)),
+                        current_translation.z + float(op.get('z', 0))
+                    )
+                    transform.translation = translation
+                    if hasattr(occurrence, 'transform2'):
+                        occurrence.transform2 = transform
+                    else:
+                        occurrence.transform = transform
+                    results.append(f"{action}:OK")
             else:
                 results.append(f"{action}:ERR_UNKNOWN_ACTION")
         except Exception as e:

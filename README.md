@@ -1,4 +1,4 @@
-# FusionMCP (v9.2.0)
+# FusionMCP (v9.3.0)
 
 FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It enables AI agents to interact directly with the Fusion 360 API to perform complex design, geometry, and mechanical engineering tasks.
 

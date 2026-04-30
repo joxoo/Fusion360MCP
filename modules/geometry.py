@@ -53,11 +53,19 @@ import json
 GEOMETRY_ERROR_MAP = {
     "ERR_SKETCH": localized_error("sketch_not_found"),
     "ERR_BODY": localized_error("body_not_found"),
+    "ERR_BODY_NOT_FOUND": localized_error("body_not_found"),
     "ERR_TARGET": localized_error("body_not_found"),
     "ERR_NOT_FOUND": localized_error("feature_not_found"),
+    "ERR_FEATURE_NOT_FOUND": localized_error("feature_not_found"),
+    "ERR_FEATURE_VALUE_UNSUPPORTED": "Error: This feature does not expose an editable value in the compact API.",
+    "ERR_NEW_NAME_REQUIRED": "Error: new_name is required for this geometry action.",
+    "ERR_DELETE_FAILED": "Error: Fusion reported that the body delete operation failed.",
     "ERR_VERIFICATION_FAILED": "Error: Geometry verification failed. The body was not created or is not visible.",
     "ERR_MIN_SURFACES": "Error: At least one surface is required.",
     "ERR_NO_PROFILE": "Error: No profile found in sketch.",
+    "ERR_COMPONENT": localized_error("component_not_found"),
+    "ERR_FACE_INDEX": "Error: face_index is out of range for the selected body.",
+    "ERR_TOOL": "Error: A valid split tool or construction plane is required.",
     "ERR_OWNER_MISMATCH": localized_error("entity_owner_mismatch"),
 }
 
@@ -115,7 +123,11 @@ def create_shell_logic(body: str, thickness: float, lang: str = "en"):
 def apply_3d_features_logic(operations: list[dict], lang: str = "en"):
     """
     Applies multiple 3D geometry features in a single batch.
-    Supported actions: extrude, fillet, chamfer, combine, create_box, create_cylinder, create_sphere.
+    Supported actions include creation and corrective body edits such as extrude,
+    fillet, chamfer, combine, create_box, create_cylinder, create_sphere,
+    delete_body, rename_body, move_body, move_body_absolute, scale_body,
+    shell, split_body, delete_face, offset_face, move_face, edit_feature,
+    and delete_feature.
     Each operation should be a dict with 'action' or 'type' and required parameters.
     """
     try:

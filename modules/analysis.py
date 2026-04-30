@@ -30,7 +30,8 @@ def get_feature_history_logic(lang: str = "en"):
 def analyze_design_logic(action: str = "validate", body: str = None, lang: str = "en"):
     """
     Performs various design analysis and inspection tasks.
-    Supported actions: get_assembly_tree, validate, scene_map, physical_data, bounding_box.
+    Supported actions: get_assembly_tree, get_feature_history, validate,
+    scene_map, physical_data, bounding_box.
     """
     try:
         res = execute_fusion_script(build_analyze_design_script(), {"action": action, "body": body}, use_common=["find_body"])

@@ -224,6 +224,25 @@ def build_edit_surfaces_script() -> str:
     return """
 try:
     results = []
+
+    def ensure_unique_body_name(desired_name):
+        base_name = str(desired_name or 'SurfaceBody').strip() or 'SurfaceBody'
+        candidate = base_name
+        suffix = 2
+        while find_body_recursive(root, candidate):
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        return candidate
+
+    def pick_surface_name(op, fallback_prefix, source_name=None):
+        requested = str(op.get('name', '') or '').strip()
+        if requested and requested.lower() not in ('body', 'body1', 'body2', 'body3', 'surfacebody', 'surfacebody1'):
+            return requested
+        source = str(source_name or '').strip().replace(' ', '_')
+        if source:
+            return f"{source}_{fallback_prefix}"
+        return fallback_prefix
+
     for op in params.get('operations', []):
         action = op.get('action')
         try:
@@ -233,6 +252,8 @@ try:
                     patches = owner_comp.features.patchFeatures
                     p_in = patches.createInput(s.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
                     p_feat = patches.add(p_in)
+                    if p_feat.bodies.count > 0:
+                        p_feat.bodies.item(0).name = ensure_unique_body_name(pick_surface_name(op, 'Patch', op.get('sketch')))
                     results.append(f"{action}:OK:{p_feat.bodies.item(0).name}")
                 else: results.append(f"{action}:ERR_SKETCH")
             elif action == 'offset':
@@ -243,6 +264,8 @@ try:
                     offsets = target.parentComponent.features.offsetFeatures
                     o_in = offsets.createInput(faces, adsk.core.ValueInput.createByReal(op['dist']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
                     o_feat = offsets.add(o_in)
+                    if o_feat.bodies.count > 0:
+                        o_feat.bodies.item(0).name = ensure_unique_body_name(pick_surface_name(op, 'Offset', op['body']))
                     results.append(f"{action}:OK:{o_feat.bodies.item(0).name}")
                 else: results.append(f"{action}:ERR_BODY")
             elif action == 'stitch':
@@ -254,6 +277,9 @@ try:
                     stitches = tools.item(0).parentComponent.features.stitchFeatures
                     s_in = stitches.createInput(tools, adsk.core.ValueInput.createByReal(op.get('tol', 0.1)), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
                     s_feat = stitches.add(s_in)
+                    if s_feat.bodies.count > 0:
+                        base_source = op['body_names'][0] if op.get('body_names') else 'Surface'
+                        s_feat.bodies.item(0).name = ensure_unique_body_name(pick_surface_name(op, 'Stitch', base_source))
                     results.append(f"{action}:OK:{s_feat.bodies.item(0).name}")
                 else: results.append(f"{action}:ERR_MIN_SURFACES")
             elif action == 'thicken':
@@ -263,6 +289,8 @@ try:
                     face = target.faces.item(0)
                     t_in = thickens.createInput(face, adsk.core.ValueInput.createByReal(op['thick']), False, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
                     t_feat = thickens.add(t_in)
+                    if t_feat.bodies.count > 0:
+                        t_feat.bodies.item(0).name = ensure_unique_body_name(pick_surface_name(op, 'Thicken', op['body']))
                     results.append(f"{action}:OK:{t_feat.bodies.item(0).name}")
                 else: results.append(f"{action}:ERR_BODY")
             else:
@@ -273,4 +301,3 @@ try:
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-

@@ -331,6 +331,27 @@ def build_edit_forms_script() -> str:
     return """
 try:
     results = []
+
+    def ensure_unique_body_name(desired_name):
+        base_name = str(desired_name or 'FormBody').strip() or 'FormBody'
+        candidate = base_name
+        suffix = 2
+        while find_body_recursive(root, candidate):
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        return candidate
+
+    def pick_form_name(op, fallback_prefix, source_name=None):
+        requested = str(op.get('name', '') or '').strip()
+        if requested and requested.lower() not in ('body', 'body1', 'body2', 'body3', 'formbody', 'formbody1'):
+            return requested
+        source = str(source_name or '').strip().replace(' ', '_')
+        if source:
+            if source.lower().endswith('sketch'):
+                source = source[:-6].rstrip('_') or source
+            return f"{source}_{fallback_prefix}"
+        return fallback_prefix
+
     for op in params.get('operations', []):
         action = op.get('action')
         try:
@@ -339,6 +360,8 @@ try:
                     s, owner_comp, err = resolve_sketch_context(op['sketch'], op.get('component_name'), op.get('component_path'))
                     if s and s.profiles.count > 0:
                         feat = owner_comp.features.formFeatures.addExtrude(s.profiles.item(0), adsk.core.ValueInput.createByReal(op['dist']), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                        if feat.bodies.count > 0:
+                            feat.bodies.item(0).name = ensure_unique_body_name(pick_form_name(op, 'FormExtrude', op.get('sketch')))
                         results.append(f"{action}:OK:{feat.bodies.item(0).name}")
                     else: results.append(f"{action}:ERR_SKETCH")
             else:
@@ -369,4 +392,3 @@ try:
 except Exception as e:
     returnValue.append(f"ERR_API:{str(e)}")
 """
-

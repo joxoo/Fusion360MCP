@@ -93,6 +93,53 @@ class TestApiProfiles(unittest.TestCase):
         self.assertIn("stitch", guide["actions"])
         self.assertEqual(guide["actions"]["thicken"]["required"], ["body", "thick"])
 
+    def test_describe_tool_actions_sketch_includes_corrective_actions(self):
+        payload = json.loads(describe_tool_actions_logic("edit_sketch"))
+        guide = payload["edit_sketch"]
+
+        self.assertIn("delete_curve", guide["actions"])
+        self.assertIn("move_entities", guide["actions"])
+        self.assertIn("copy_entities", guide["actions"])
+        self.assertIn("mirror_entities", guide["actions"])
+        self.assertIn("trim", guide["actions"])
+        self.assertIn("clear_sketch", guide["actions"])
+        self.assertEqual(guide["actions"]["draw_arc"]["required"], ["cx", "cy", "sx", "sy", "angle"])
+        self.assertIn("semantic and stable", " ".join(guide["rules"]))
+
+    def test_describe_tool_actions_geometry_and_assembly_include_corrective_actions(self):
+        geometry_payload = json.loads(describe_tool_actions_logic("apply_3d_features"))
+        assembly_payload = json.loads(describe_tool_actions_logic("edit_assembly"))
+
+        self.assertIn("delete_body", geometry_payload["apply_3d_features"]["actions"])
+        self.assertIn("rename_body", geometry_payload["apply_3d_features"]["actions"])
+        self.assertIn("edit_feature", geometry_payload["apply_3d_features"]["actions"])
+        self.assertIn("delete_feature", geometry_payload["apply_3d_features"]["actions"])
+        self.assertIn("shell", geometry_payload["apply_3d_features"]["actions"])
+        self.assertIn("rename_component", assembly_payload["edit_assembly"]["actions"])
+        self.assertIn("delete_component", assembly_payload["edit_assembly"]["actions"])
+        self.assertIn("move_component", assembly_payload["edit_assembly"]["actions"])
+        self.assertIn("semantic body names", " ".join(geometry_payload["apply_3d_features"]["rules"]))
+        self.assertIn("semantic names", " ".join(assembly_payload["edit_assembly"]["rules"]))
+
+    def test_describe_tool_actions_create_sketch_mentions_semantic_names(self):
+        payload = json.loads(describe_tool_actions_logic("create_sketch"))
+        guide = payload["create_sketch"]
+
+        self.assertIn("semantic names", " ".join(guide["rules"]))
+
+    def test_describe_tool_actions_analysis_mentions_references(self):
+        payload = json.loads(describe_tool_actions_logic("analyze_design"))
+        guide = payload["analyze_design"]
+
+        self.assertIn("rules", guide)
+        self.assertIn("component_path", " ".join(guide["rules"]))
+        self.assertIn("body_ref", " ".join(guide["rules"]))
+        self.assertIn("sketch_ref", " ".join(guide["rules"]))
+        self.assertIn("curve_ref", " ".join(guide["rules"]))
+        self.assertIn("constraint_ref", " ".join(guide["rules"]))
+        self.assertIn("dimension_ref", " ".join(guide["rules"]))
+        self.assertIn("get_feature_history", guide["actions"])
+
     def test_describe_tool_actions_mesh_and_parameters_examples(self):
         mesh_payload = json.loads(describe_tool_actions_logic("edit_mesh"))
         param_payload = json.loads(describe_tool_actions_logic("edit_parameters"))
