@@ -552,9 +552,41 @@ try:
     elif action == 'capture_view':
         view = app.activeViewport
         path = os.path.join(tempfile.gettempdir(), 'fusion_cap.png')
-        view.saveAsImageFile(path, 800, 600)
+        w = params.get('width', 1280)
+        h = params.get('height', 720)
+        view.saveAsImageFile(path, w, h)
         with open(path, 'rb') as f: returnValue.append(base64.b64encode(f.read()).decode('utf-8'))
         os.remove(path)
+    elif action == 'capture_side':
+        view = app.activeViewport
+        camera = view.camera
+        camera.cameraType = adsk.core.CameraTypes.OrthographicCameraType
+        camera.viewOrientation = adsk.core.ViewOrientations.RightViewOrientation
+        camera.isFitView = True
+        view.camera = camera
+        view.refresh()
+        path = os.path.join(tempfile.gettempdir(), 'fusion_side.png')
+        view.saveAsImageFile(path, 1280, 720)
+        with open(path, 'rb') as f: returnValue.append(base64.b64encode(f.read()).decode('utf-8'))
+        os.remove(path)
+    elif action == 'interference_check':
+        design = adsk.fusion.Design.cast(app.activeProduct)
+        input_ents = adsk.core.ObjectCollection.create()
+        for occ in root.allOccurrences:
+            input_ents.add(occ)
+        
+        results_list = []
+        if input_ents.count > 1:
+            input_set = design.createInterferenceInput(input_ents)
+            results = design.analyzeInterference(input_set)
+            for i in range(results.count):
+                res = results.item(i)
+                results_list.append({
+                    "body1": res.entityOne.name,
+                    "body2": res.entityTwo.name,
+                    "volume_cm3": res.interferenceBody.volume
+                })
+        returnValue.append(json.dumps(results_list))
     elif action == 'validate':
         results = {"body_count": 0, "brep_count": 0, "mesh_count": 0, "sketch_count": 0, "bodies": [], "sketches": [], "manifold_issues": []}
         collect_validation(root, results)

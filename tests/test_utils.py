@@ -132,8 +132,11 @@ class TestUtils(unittest.TestCase):
 
         self.assertEqual(res, "Slot drawn.")
         script = mock_exec.call_args[0][0]
-        self.assertIn("s.sketchCurves.sketchSlots.addCenterToCenterSlot(", script)
-        self.assertIn("sw = float(params['w']) / 10.0", script)
+        self.assertIn("if hasattr(s, 'addCenterToCenterSlot'):", script)
+        self.assertIn("s.addCenterToCenterSlot(start_point, end_point, width_value)", script)
+        self.assertIn("s.sketchCurves.sketchArcs.addByCenterStartSweep(start_point, start_top, math.pi)", script)
+        self.assertIn("sw = adsk.core.ValueInput.createByReal(float(params['w']))", script)
+        self.assertIn("add_center_to_center_slot(p1, p2, sw)", script)
 
     def test_sketch_circular_pattern_collects_typed_curve_collections(self):
         with patch('modules.sketch.execute_fusion_script') as mock_exec:

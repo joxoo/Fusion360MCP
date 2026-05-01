@@ -102,8 +102,8 @@ class BridgeResponse:
         return {"version": "v9", "status": "success", "data": data, "detail": detail}
     
     @staticmethod
-    def error(message):
-        return {"version": "v9", "status": "error", "message": message}
+    def error(message, data=None):
+        return {"version": "v9", "status": "error", "message": message, "data": data}
 
 class McpCommandHandler(adsk.core.CustomEventHandler):
     def notify(self, args):

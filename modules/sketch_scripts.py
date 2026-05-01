@@ -296,10 +296,38 @@ def build_draw_slot_script() -> str:
     if err:
         returnValue.append(err)
     elif s:
+        def add_center_to_center_slot(start_point, end_point, width_value):
+            if hasattr(s, 'addCenterToCenterSlot'):
+                s.addCenterToCenterSlot(start_point, end_point, width_value)
+                return
+
+            width_real = width_value.value if hasattr(width_value, 'value') else float(width_value)
+            dx = end_point.x - start_point.x
+            dy = end_point.y - start_point.y
+            length = math.hypot(dx, dy)
+            if length <= 1e-9:
+                raise ValueError('slot length must be greater than zero')
+
+            radius = width_real / 2.0
+            ux = dx / length
+            uy = dy / length
+            px = -uy
+            py = ux
+
+            start_top = adsk.core.Point3D.create(start_point.x + (px * radius), start_point.y + (py * radius), 0)
+            start_bottom = adsk.core.Point3D.create(start_point.x - (px * radius), start_point.y - (py * radius), 0)
+            end_top = adsk.core.Point3D.create(end_point.x + (px * radius), end_point.y + (py * radius), 0)
+            end_bottom = adsk.core.Point3D.create(end_point.x - (px * radius), end_point.y - (py * radius), 0)
+
+            s.sketchCurves.sketchArcs.addByCenterStartSweep(start_point, start_top, math.pi)
+            s.sketchCurves.sketchArcs.addByCenterStartSweep(end_point, end_bottom, math.pi)
+            s.sketchCurves.sketchLines.addByTwoPoints(start_top, end_top)
+            s.sketchCurves.sketchLines.addByTwoPoints(start_bottom, end_bottom)
+
         p1 = adsk.core.Point3D.create(params['x1'], params['y1'], 0)
         p2 = adsk.core.Point3D.create(params['x2'], params['y2'], 0)
-        sw = float(params['w']) / 10.0
-        s.sketchCurves.sketchSlots.addCenterToCenterSlot(p1, p2, sw)
+        sw = adsk.core.ValueInput.createByReal(float(params['w']))
+        add_center_to_center_slot(p1, p2, sw)
         returnValue.append("OK")
     else: returnValue.append("ERR_SKETCH_NOT_FOUND")
 except Exception as e:
@@ -327,12 +355,24 @@ try:
                     curves.append(curve)
             return curves
 
-        def get_curve(op):
-            curves = editable_curves()
+        def get_primary_curve_index(op):
             idx = op.get('curve_index')
             if idx is None:
                 curve_ref = op.get('curve_ref') or {}
                 idx = curve_ref.get('curve_index')
+            if idx is None:
+                curve_indices = op.get('curve_indices')
+                if curve_indices:
+                    idx = curve_indices[0]
+            if idx is None:
+                curve_refs = op.get('curve_refs') or []
+                if curve_refs:
+                    idx = curve_refs[0].get('curve_index')
+            return idx
+
+        def get_curve(op):
+            curves = editable_curves()
+            idx = get_primary_curve_index(op)
             if idx is None:
                 return None, "ERR_CURVE_INDEX_REQUIRED"
             if idx < 0 or idx >= len(curves):
@@ -394,12 +434,21 @@ try:
             return dims[idx], None
 
         def get_curve_pair(op):
-            curve_one, err_one = get_curve({"curve_index": op.get("curve_index"), "curve_ref": op.get("curve_ref")})
+            pair_indices = op.get('curve_indices') or []
+            pair_refs = op.get('curve_refs') or []
+            curve_one_payload = {"curve_index": op.get("curve_index"), "curve_ref": op.get("curve_ref")}
+            curve_two_payload = {"curve_index": op.get("other_curve_index"), "curve_ref": op.get("other_curve_ref")}
+            if pair_indices:
+                curve_one_payload["curve_index"] = pair_indices[0] if len(pair_indices) > 0 else None
+                curve_two_payload["curve_index"] = pair_indices[1] if len(pair_indices) > 1 else None
+            elif pair_refs:
+                curve_one_payload["curve_ref"] = pair_refs[0] if len(pair_refs) > 0 else None
+                curve_two_payload["curve_ref"] = pair_refs[1] if len(pair_refs) > 1 else None
+
+            curve_one, err_one = get_curve(curve_one_payload)
             if err_one:
                 return None, None, err_one
-            other_idx = op.get('other_curve_index')
-            other_ref = op.get('other_curve_ref')
-            curve_two, err_two = get_curve({"curve_index": other_idx, "curve_ref": other_ref})
+            curve_two, err_two = get_curve(curve_two_payload)
             if err_two:
                 return None, None, err_two
             return curve_one, curve_two, None
@@ -429,6 +478,350 @@ try:
                 return adsk.fusion.DimensionOrientations.VerticalDimensionOrientation
             return adsk.fusion.DimensionOrientations.AlignedDimensionOrientation
 
+        def normalize_constraint_type(name):
+            constraint_name = str(name or "").strip().lower()
+            aliases = {
+                "horizontalconstraint": "horizontal",
+                "verticalconstraint": "vertical",
+                "parallelconstraint": "parallel",
+                "perpendicularconstraint": "perpendicular",
+                "collinearconstraint": "collinear",
+                "tangentconstraint": "tangent",
+                "concentricconstraint": "concentric",
+            }
+            return aliases.get(constraint_name, constraint_name)
+
+        def normalize_dimension_type(name):
+            dimension_name = str(name or "").strip().lower()
+            aliases = {
+                "distancedimension": "distance",
+                "radialdimension": "radial",
+                "radiusdimension": "radial",
+                "diameterdimension": "diameter",
+                "angulardimension": "angular",
+            }
+            return aliases.get(dimension_name, dimension_name)
+
+        def get_sketch_health_message():
+            try:
+                message = str(getattr(s, 'errorOrWarningMessage', '') or '').strip()
+                return message
+            except:
+                return ""
+
+        def get_component_plane_entity(component, plane_name):
+            plane_key = str(plane_name or 'XY').upper()
+            return {
+                'XY': component.xYConstructionPlane,
+                'XZ': component.xZConstructionPlane,
+                'YZ': component.yZConstructionPlane,
+            }.get(plane_key, component.xYConstructionPlane)
+
+        def resolve_body_from_op(op, body_key='body'):
+            body_name = op.get(body_key)
+            if not body_name:
+                return None, None, "ERR_BODY"
+            return resolve_body_context(body_name, op.get('component_name'), op.get('component_path'))
+
+        def get_faces_from_op(op):
+            body, body_owner, body_err = resolve_body_from_op(op)
+            if body_err:
+                return None, None, body_err
+
+            face_indices = op.get('face_indices')
+            if face_indices is None:
+                face_index = op.get('face_index')
+                face_indices = [face_index] if face_index is not None else []
+            if not face_indices:
+                return None, None, "ERR_FACE_INDEX_REQUIRED"
+
+            faces = []
+            for idx in face_indices:
+                idx = int(idx)
+                if idx < 0 or idx >= body.faces.count:
+                    return None, None, "ERR_FACE_INDEX"
+                faces.append(body.faces.item(idx))
+            return faces, body_owner, None
+
+        def collect_projection_entities(op):
+            entities = []
+            selected_curves, curve_err = get_selected_curves(op)
+            if not curve_err and selected_curves:
+                entities.extend(selected_curves)
+
+            body_name = op.get('body')
+            if body_name:
+                body, _, body_err = resolve_body_from_op(op)
+                if body_err:
+                    return None, body_err
+
+                face_indices = op.get('face_indices')
+                if face_indices is None and op.get('face_index') is not None:
+                    face_indices = [op.get('face_index')]
+                if face_indices:
+                    for idx in face_indices:
+                        idx = int(idx)
+                        if idx < 0 or idx >= body.faces.count:
+                            return None, "ERR_FACE_INDEX"
+                        entities.append(body.faces.item(idx))
+                else:
+                    edge_indices = op.get('edge_indices')
+                    if edge_indices is None and op.get('edge_index') is not None:
+                        edge_indices = [op.get('edge_index')]
+                    vertex_indices = op.get('vertex_indices')
+                    if vertex_indices is None and op.get('vertex_index') is not None:
+                        vertex_indices = [op.get('vertex_index')]
+
+                    if edge_indices:
+                        for idx in edge_indices:
+                            idx = int(idx)
+                            if idx < 0 or idx >= body.edges.count:
+                                return None, "ERR_INVALID_ENTITY"
+                            entities.append(body.edges.item(idx))
+                    elif vertex_indices:
+                        for idx in vertex_indices:
+                            idx = int(idx)
+                            if idx < 0 or idx >= body.vertices.count:
+                                return None, "ERR_INVALID_ENTITY"
+                            entities.append(body.vertices.item(idx))
+                    else:
+                        entities.append(body)
+
+            if not entities:
+                return None, "ERR_INVALID_ENTITY"
+            return entities, None
+
+        def resolve_projection_direction(op):
+            direction_axis = op.get('direction_axis')
+            if direction_axis:
+                axis_name = str(direction_axis).lower()
+                if axis_name == 'x':
+                    return owner.xConstructionAxis, None
+                if axis_name == 'y':
+                    return owner.yConstructionAxis, None
+                return owner.zConstructionAxis, None
+
+            direction_curve_index = op.get('direction_curve_index')
+            direction_curve_ref = op.get('direction_curve_ref')
+            if direction_curve_index is not None or direction_curve_ref:
+                return get_curve({"curve_index": direction_curve_index, "curve_ref": direction_curve_ref})
+
+            return None, "ERR_DIRECTION_REQUIRED"
+
+        def get_surface_project_type(name):
+            project_type = str(name or 'closest_point').strip().lower()
+            if project_type in ('closest_point', 'closest', 'closestpoint'):
+                return adsk.fusion.SurfaceProjectTypes.ClosestPointSurfaceProjectType, None
+            if project_type in ('along_vector', 'vector', 'alongvector'):
+                return adsk.fusion.SurfaceProjectTypes.AlongVectorSurfaceProjectType, None
+            return None, "ERR_UNKNOWN_PROJECTION_TYPE"
+
+        def resolve_spun_profile_entities(op):
+            body_names = op.get('bodies') or []
+            if body_names:
+                entities = []
+                entity_owner = None
+                for body_name in body_names:
+                    target, target_owner, target_err = resolve_body_context(body_name, op.get('component_name'), op.get('component_path'))
+                    if target_err or not target:
+                        return None, None, target_err or "ERR_BODY"
+                    if entity_owner is None:
+                        entity_owner = target_owner
+                    elif target_owner != entity_owner:
+                        return None, None, "ERR_INVALID_ENTITY"
+                    entities.append(target)
+                return entities, entity_owner, None
+
+            target, target_owner, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+            if target_err or not target:
+                return None, None, target_err or "ERR_BODY"
+
+            face_indices = op.get('face_indices')
+            if face_indices is None and op.get('face_index') is not None:
+                face_indices = [op.get('face_index')]
+
+            if face_indices:
+                entities = []
+                for face_index in face_indices:
+                    face_index = int(face_index)
+                    if face_index < 0 or face_index >= target.faces.count:
+                        return None, None, "ERR_FACE_INDEX"
+                    entities.append(target.faces.item(face_index))
+                return entities, target_owner, None
+
+            return [target], target_owner, None
+
+        def resolve_spun_profile_axis(op, default_owner):
+            axis_curve_index = op.get('axis_curve_index')
+            axis_curve_ref = op.get('axis_curve_ref')
+            if axis_curve_index is not None or axis_curve_ref:
+                return get_curve({"curve_index": axis_curve_index, "curve_ref": axis_curve_ref})
+
+            axis_body_name = op.get('axis_body')
+            axis_edge_index = op.get('axis_edge_index')
+            if axis_edge_index is not None:
+                axis_body_name = axis_body_name or op.get('body')
+                if not axis_body_name:
+                    return None, "ERR_INVALID_ENTITY"
+                axis_body, _, axis_body_err = resolve_body_context(axis_body_name, op.get('component_name'), op.get('component_path'))
+                if axis_body_err or not axis_body:
+                    return None, axis_body_err or "ERR_BODY"
+                edge_index = int(axis_edge_index)
+                if edge_index < 0 or edge_index >= axis_body.edges.count:
+                    return None, "ERR_INVALID_ENTITY"
+                axis_edge = axis_body.edges.item(edge_index)
+                if not hasattr(axis_edge, 'geometry') or 'Line3D' not in getattr(axis_edge.geometry, 'objectType', ''):
+                    return None, "ERR_INVALID_ENTITY"
+                return axis_edge, None
+
+            axis_name = str(op.get('axis', 'z')).lower()
+            if axis_name == 'x':
+                return default_owner.xConstructionAxis, None
+            if axis_name == 'y':
+                return default_owner.yConstructionAxis, None
+            return default_owner.zConstructionAxis, None
+
+        def project_entities_to_sketch(entities, is_linked=False):
+            if hasattr(s, 'project2'):
+                return s.project2(entities, bool(is_linked))
+
+            if len(entities) == 1:
+                return s.project(entities[0])
+
+            collection = adsk.core.ObjectCollection.create()
+            for entity in entities:
+                collection.add(entity)
+            return s.project(collection)
+
+        def add_center_to_center_slot(start_point, end_point, width_value):
+            if hasattr(s, 'addCenterToCenterSlot'):
+                s.addCenterToCenterSlot(start_point, end_point, width_value)
+                return
+
+            width_real = width_value.value if hasattr(width_value, 'value') else float(width_value)
+            dx = end_point.x - start_point.x
+            dy = end_point.y - start_point.y
+            length = math.hypot(dx, dy)
+            if length <= 1e-9:
+                raise ValueError('slot length must be greater than zero')
+
+            radius = width_real / 2.0
+            ux = dx / length
+            uy = dy / length
+            px = -uy
+            py = ux
+
+            start_top = adsk.core.Point3D.create(start_point.x + (px * radius), start_point.y + (py * radius), 0)
+            start_bottom = adsk.core.Point3D.create(start_point.x - (px * radius), start_point.y - (py * radius), 0)
+            end_top = adsk.core.Point3D.create(end_point.x + (px * radius), end_point.y + (py * radius), 0)
+            end_bottom = adsk.core.Point3D.create(end_point.x - (px * radius), end_point.y - (py * radius), 0)
+
+            s.sketchCurves.sketchArcs.addByCenterStartSweep(start_point, start_top, math.pi)
+            s.sketchCurves.sketchArcs.addByCenterStartSweep(end_point, end_bottom, math.pi)
+            s.sketchCurves.sketchLines.addByTwoPoints(start_top, end_top)
+            s.sketchCurves.sketchLines.addByTwoPoints(start_bottom, end_bottom)
+
+        def add_overall_slot(start_point, end_point, width_value):
+            if hasattr(s, 'addOverallSlot'):
+                s.addOverallSlot(start_point, end_point, width_value)
+                return
+
+            width_real = width_value.value if hasattr(width_value, 'value') else float(width_value)
+            dx = end_point.x - start_point.x
+            dy = end_point.y - start_point.y
+            length = math.hypot(dx, dy)
+            if length <= width_real:
+                raise ValueError('overall slot length must be greater than width')
+
+            inset = width_real / 2.0
+            ux = dx / length
+            uy = dy / length
+            center_start = adsk.core.Point3D.create(start_point.x + (ux * inset), start_point.y + (uy * inset), 0)
+            center_end = adsk.core.Point3D.create(end_point.x - (ux * inset), end_point.y - (uy * inset), 0)
+            add_center_to_center_slot(center_start, center_end, width_value)
+
+        def add_center_point_slot(center_point, direction_point, width_value):
+            if hasattr(s, 'addCenterPointSlot'):
+                s.addCenterPointSlot(center_point, direction_point, width_value)
+                return
+
+            width_real = width_value.value if hasattr(width_value, 'value') else float(width_value)
+            dx = direction_point.x - center_point.x
+            dy = direction_point.y - center_point.y
+            if math.hypot(dx, dy) <= 1e-9:
+                raise ValueError('slot direction point must differ from center point')
+
+            start_point = adsk.core.Point3D.create(center_point.x - dx, center_point.y - dy, 0)
+            end_point = adsk.core.Point3D.create(direction_point.x, direction_point.y, 0)
+            add_center_to_center_slot(start_point, end_point, adsk.core.ValueInput.createByReal(width_real))
+
+        def add_regular_polygon(center_x, center_y, radius, sides, rotation_radians=0.0):
+            if sides < 3:
+                raise ValueError('polygon requires at least 3 sides')
+
+            pts = []
+            for i in range(sides):
+                angle = rotation_radians + (i * 2.0 * math.pi / sides)
+                pts.append(adsk.core.Point3D.create(center_x + radius * math.cos(angle), center_y + radius * math.sin(angle), 0))
+            for i in range(sides):
+                s.sketchCurves.sketchLines.addByTwoPoints(pts[i], pts[(i + 1) % sides])
+
+        def add_center_rectangle(center_point, corner_point):
+            if hasattr(s.sketchCurves.sketchLines, 'addCenterPointRectangle'):
+                s.sketchCurves.sketchLines.addCenterPointRectangle(center_point, corner_point)
+                return
+
+            dx = corner_point.x - center_point.x
+            dy = corner_point.y - center_point.y
+            p1 = adsk.core.Point3D.create(center_point.x - dx, center_point.y - dy, 0)
+            p2 = adsk.core.Point3D.create(center_point.x + dx, center_point.y + dy, 0)
+            s.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
+
+        def add_three_point_rectangle(point_one, point_two, point_three):
+            if hasattr(s.sketchCurves.sketchLines, 'addThreePointRectangle'):
+                s.sketchCurves.sketchLines.addThreePointRectangle(point_one, point_two, point_three)
+                return
+
+            vx = point_two.x - point_one.x
+            vy = point_two.y - point_one.y
+            length = math.hypot(vx, vy)
+            if length <= 1e-9:
+                raise ValueError('rectangle base length must be greater than zero')
+
+            nx = -vy / length
+            ny = vx / length
+            offset = ((point_three.x - point_one.x) * nx) + ((point_three.y - point_one.y) * ny)
+            point_four = adsk.core.Point3D.create(point_two.x + (nx * offset), point_two.y + (ny * offset), 0)
+            point_three_projected = adsk.core.Point3D.create(point_one.x + (nx * offset), point_one.y + (ny * offset), 0)
+            s.sketchCurves.sketchLines.addByTwoPoints(point_one, point_two)
+            s.sketchCurves.sketchLines.addByTwoPoints(point_two, point_four)
+            s.sketchCurves.sketchLines.addByTwoPoints(point_four, point_three_projected)
+            s.sketchCurves.sketchLines.addByTwoPoints(point_three_projected, point_one)
+
+        def add_edge_polygon(point_one, point_two, sides, flip=False):
+            if sides < 3:
+                raise ValueError('polygon requires at least 3 sides')
+
+            dx = point_two.x - point_one.x
+            dy = point_two.y - point_one.y
+            edge_length = math.hypot(dx, dy)
+            if edge_length <= 1e-9:
+                raise ValueError('polygon edge length must be greater than zero')
+
+            interior_angle = math.pi / sides
+            radius = edge_length / (2.0 * math.sin(interior_angle))
+            midpoint = adsk.core.Point3D.create((point_one.x + point_two.x) / 2.0, (point_one.y + point_two.y) / 2.0, 0)
+            nx = -dy / edge_length
+            ny = dx / edge_length
+            if flip:
+                nx = -nx
+                ny = -ny
+            apothem = radius * math.cos(interior_angle)
+            center_x = midpoint.x + (nx * apothem)
+            center_y = midpoint.y + (ny * apothem)
+            start_angle = math.atan2(point_one.y - center_y, point_one.x - center_x)
+            add_regular_polygon(center_x, center_y, radius, sides, start_angle)
+
         results = []
         for op in params.get('operations', []):
             action = op.get('action')
@@ -448,12 +841,41 @@ try:
                     p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
                     s.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
                     results.append(f"{action}:OK")
+                elif action == 'draw_center_rectangle':
+                    center = adsk.core.Point3D.create(op['cx'], op['cy'], 0)
+                    corner = adsk.core.Point3D.create(op['x'], op['y'], 0)
+                    add_center_rectangle(center, corner)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_three_point_rectangle':
+                    p1 = adsk.core.Point3D.create(op['x1'], op['y1'], 0)
+                    p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
+                    p3 = adsk.core.Point3D.create(op['x3'], op['y3'], 0)
+                    add_three_point_rectangle(p1, p2, p3)
+                    results.append(f"{action}:OK")
                 elif action == 'draw_polygon':
                     cx, cy = float(op['cx']), float(op['cy'])
                     r = float(op.get('radius', op.get('r', 0)))
                     n = int(op.get('sides', 6))
-                    pts = [adsk.core.Point3D.create(cx + r*math.cos(i*2*math.pi/n), cy + r*math.sin(i*2*math.pi/n), 0) for i in range(n)]
-                    for i in range(n): s.sketchCurves.sketchLines.addByTwoPoints(pts[i], pts[(i+1)%n])
+                    add_regular_polygon(cx, cy, r, n)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_inscribed_polygon':
+                    cx, cy = float(op['cx']), float(op['cy'])
+                    r = float(op.get('radius', op.get('r', 0)))
+                    n = int(op.get('sides', 6))
+                    add_regular_polygon(cx, cy, r, n)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_circumscribed_polygon':
+                    cx, cy = float(op['cx']), float(op['cy'])
+                    apothem = float(op.get('radius', op.get('r', 0)))
+                    n = int(op.get('sides', 6))
+                    radius = apothem / math.cos(math.pi / n)
+                    add_regular_polygon(cx, cy, radius, n)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_edge_polygon':
+                    p1 = adsk.core.Point3D.create(op['x1'], op['y1'], 0)
+                    p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
+                    n = int(op.get('sides', 6))
+                    add_edge_polygon(p1, p2, n, bool(op.get('flip', False)))
                     results.append(f"{action}:OK")
                 elif action == 'draw_arc':
                     center = adsk.core.Point3D.create(op['cx'], op['cy'], 0)
@@ -470,8 +892,20 @@ try:
                 elif action == 'draw_slot':
                     p1 = adsk.core.Point3D.create(op['x1'], op['y1'], 0)
                     p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
-                    width = float(op.get('width', op.get('w', 0))) / 10.0
-                    s.sketchCurves.sketchSlots.addCenterToCenterSlot(p1, p2, width)
+                    width = adsk.core.ValueInput.createByReal(float(op.get('width', op.get('w', 0))))
+                    add_center_to_center_slot(p1, p2, width)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_overall_slot':
+                    p1 = adsk.core.Point3D.create(op['x1'], op['y1'], 0)
+                    p2 = adsk.core.Point3D.create(op['x2'], op['y2'], 0)
+                    width = adsk.core.ValueInput.createByReal(float(op.get('width', op.get('w', 0))))
+                    add_overall_slot(p1, p2, width)
+                    results.append(f"{action}:OK")
+                elif action == 'draw_center_point_slot':
+                    center = adsk.core.Point3D.create(op['cx'], op['cy'], 0)
+                    direction = adsk.core.Point3D.create(op['x'], op['y'], 0)
+                    width = adsk.core.ValueInput.createByReal(float(op.get('width', op.get('w', 0))))
+                    add_center_point_slot(center, direction, width)
                     results.append(f"{action}:OK")
                 elif action == 'draw_ellipse':
                     center = adsk.core.Point3D.create(op['cx'], op['cy'], 0)
@@ -479,28 +913,156 @@ try:
                     on_ellipse = adsk.core.Point3D.create(op['ox'], op['oy'], 0)
                     s.sketchCurves.sketchEllipses.add(center, major, on_ellipse)
                     results.append(f"{action}:OK")
-                elif action == 'project_geometry':
-                    body, body_owner, body_err = resolve_body_context(op['body'])
-                    if body_err:
-                        results.append(f"{action}:{body_err}")
-                    elif body:
-                        for edge in body.edges:
-                            s.project(edge)
+                elif action == 'draw_text':
+                    texts = s.sketchTexts
+                    point = adsk.core.Point3D.create(float(op['x']), float(op['y']), 0)
+                    height = float(op.get('height', 1.0))
+                    text_input = texts.createInput(str(op['text']), height, point)
+                    if op.get('font'):
+                        text_input.fontName = str(op['font'])
+                    texts.add(text_input)
+                    results.append(f"{action}:OK")
+                elif action == 'import_svg':
+                    imported = s.importSVG(
+                        str(op['path']),
+                        float(op.get('x', 0)),
+                        float(op.get('y', 0)),
+                        float(op.get('scale', 1.0))
+                    )
+                    if imported:
                         results.append(f"{action}:OK")
                     else:
-                        results.append(f"{action}:ERR_BODY")
+                        health_message = get_sketch_health_message()
+                        results.append(f"{action}:ERR:{health_message if health_message else 'SVG import failed'}")
+                elif action == 'create_spun_profile':
+                    entities, entities_owner, target_err = resolve_spun_profile_entities(op)
+                    if not entities:
+                        results.append(f"{action}:{target_err or 'ERR_BODY'}")
+                    else:
+                        spun_input = s.createSpunProfileInput()
+                        spun_input.entities = entities
+
+                        axis_entity, axis_err = resolve_spun_profile_axis(op, entities_owner or owner)
+                        if axis_err:
+                            results.append(f"{action}:{axis_err}")
+                            continue
+                        spun_input.axis = axis_entity
+                        if op.get('flip_result') is not None:
+                            spun_input.flipResult = bool(op.get('flip_result'))
+                        if op.get('is_axis_projected') is not None:
+                            spun_input.isAxisProjected = bool(op.get('is_axis_projected'))
+                        if op.get('is_centerline_added') is not None:
+                            spun_input.isCenterlineAdded = bool(op.get('is_centerline_added'))
+                        if op.get('tolerance') is not None:
+                            spun_input.tolerance = float(op.get('tolerance'))
+
+                        spun_result = s.createSpunProfile(spun_input)
+                        if spun_result:
+                            results.append(f"{action}:OK")
+                        else:
+                            health_message = get_sketch_health_message()
+                            results.append(f"{action}:ERR:{health_message if health_message else 'Spun profile creation failed'}")
+                elif action == 'project_geometry':
+                    entities, entity_err = collect_projection_entities(op)
+                    if entity_err:
+                        results.append(f"{action}:{entity_err}")
+                    else:
+                        project_entities_to_sketch(entities, bool(op.get('is_linked', False)))
+                        results.append(f"{action}:OK")
+                elif action == 'project_cut_edges':
+                    body, _, body_err = resolve_body_from_op(op)
+                    if body_err:
+                        results.append(f"{action}:{body_err}")
+                    else:
+                        s.projectCutEdges(body)
+                        results.append(f"{action}:OK")
+                elif action == 'include_geometry':
+                    entities, entity_err = collect_projection_entities(op)
+                    if entity_err:
+                        results.append(f"{action}:{entity_err}")
+                    else:
+                        for entity in entities:
+                            s.include(entity)
+                        results.append(f"{action}:OK")
+                elif action == 'project_to_surface':
+                    faces, _, face_err = get_faces_from_op(op)
+                    if face_err:
+                        results.append(f"{action}:{face_err}")
+                    else:
+                        source_curves, curve_err = get_selected_curves(op)
+                        if curve_err:
+                            results.append(f"{action}:{curve_err}")
+                        else:
+                            project_type, type_err = get_surface_project_type(op.get('projection_type'))
+                            if type_err:
+                                results.append(f"{action}:{type_err}")
+                            else:
+                                if project_type == adsk.fusion.SurfaceProjectTypes.AlongVectorSurfaceProjectType:
+                                    direction_entity, direction_err = resolve_projection_direction(op)
+                                    if direction_err:
+                                        results.append(f"{action}:{direction_err}")
+                                        continue
+                                    s.projectToSurface(faces, source_curves, project_type, direction_entity)
+                                else:
+                                    s.projectToSurface(faces, source_curves, project_type)
+                                results.append(f"{action}:OK")
+                elif action == 'redefine':
+                    target_plane = None
+                    if op.get('body') is not None:
+                        faces, _, face_err = get_faces_from_op(op)
+                        if face_err:
+                            results.append(f"{action}:{face_err}")
+                            continue
+                        target_plane = faces[0]
+                    else:
+                        target_plane = get_component_plane_entity(owner, op.get('plane_name', op.get('plane')))
+
+                    redefine_ok = False
+                    if hasattr(s, 'referencePlane'):
+                        s.referencePlane = target_plane
+                        redefine_ok = True
+                    elif hasattr(s, 'redefine'):
+                        redefine_ok = bool(s.redefine(target_plane))
+
+                    if redefine_ok:
+                        results.append(f"{action}:OK")
+                    else:
+                        health_message = get_sketch_health_message()
+                        results.append(f"{action}:ERR:{health_message if health_message else 'Sketch redefine failed'}")
+                elif action == 'find_connected_curves':
+                    seed_curve, curve_err = get_curve(op)
+                    if curve_err:
+                        results.append(f"{action}:{curve_err}")
+                    else:
+                        connected = s.findConnectedCurves(seed_curve)
+                        results.append(f"{action}:OK:{connected.count if hasattr(connected, 'count') else len(connected)}")
                 elif action == 'offset':
                     entities = adsk.core.ObjectCollection.create()
-                    selected = op.get('curve_indices')
-                    curves = editable_curves()
-                    if selected:
-                        for idx in selected:
-                            if idx < 0 or idx >= len(curves):
-                                raise ValueError(f"curve index {idx} out of range")
-                            entities.add(curves[idx])
+                    seed_curve_index = op.get('seed_curve_index')
+                    seed_curve_ref = op.get('seed_curve_ref')
+                    if seed_curve_index is not None or seed_curve_ref:
+                        seed_curve, curve_err = get_curve({"curve_index": seed_curve_index, "curve_ref": seed_curve_ref})
+                        if curve_err:
+                            results.append(f"{action}:{curve_err}")
+                            continue
+                        connected = s.findConnectedCurves(seed_curve)
+                        if hasattr(connected, 'count'):
+                            for idx in range(connected.count):
+                                entities.add(connected.item(idx))
+                        else:
+                            for curve in connected:
+                                entities.add(curve)
                     else:
-                        for curve in curves:
-                            entities.add(curve)
+                        selected = op.get('curve_indices')
+                        curves = editable_curves()
+                        if selected:
+                            for idx in selected:
+                                if idx < 0 or idx >= len(curves):
+                                    raise ValueError(f"curve index {idx} out of range")
+                                entities.add(curves[idx])
+                        else:
+                            for curve in curves:
+                                entities.add(curve)
                     if entities.count < 1:
                         results.append(f"{action}:ERR_EMPTY")
                     else:
@@ -645,14 +1207,52 @@ try:
                         curve.trim(trim_point)
                         results.append(f"{action}:OK")
                 elif action == 'clear_sketch':
-                    for idx in range(s.sketchTexts.count - 1, -1, -1):
-                        s.sketchTexts.item(idx).deleteMe()
-                    for curve in reversed(editable_curves()):
-                        curve.deleteMe()
+                    try:
+                        s.isComputeDeferred = True
+                    except:
+                        pass
+                    while s.sketchDimensions.count > 0:
+                        try:
+                            s.sketchDimensions.item(s.sketchDimensions.count - 1).deleteMe()
+                        except:
+                            break
+                    while s.geometricConstraints.count > 0:
+                        try:
+                            constraint = s.geometricConstraints.item(s.geometricConstraints.count - 1)
+                            if hasattr(constraint, 'isDeletable') and not constraint.isDeletable:
+                                break
+                            constraint.deleteMe()
+                        except:
+                            break
+                    while s.sketchTexts.count > 0:
+                        try:
+                            s.sketchTexts.item(s.sketchTexts.count - 1).deleteMe()
+                        except:
+                            break
+                    while True:
+                        try:
+                            curves = editable_curves()
+                        except:
+                            curves = []
+                        if not curves:
+                            break
+                        deleted_any = False
+                        for curve in reversed(curves):
+                            try:
+                                curve.deleteMe()
+                                deleted_any = True
+                            except:
+                                continue
+                        if not deleted_any:
+                            break
+                    try:
+                        s.isComputeDeferred = False
+                    except:
+                        pass
                     results.append(f"{action}:OK")
                 elif action == 'add_constraint':
                     constraints = s.geometricConstraints
-                    constraint_type = str(op.get('type', '')).lower()
+                    constraint_type = normalize_constraint_type(op.get('type', ''))
                     if constraint_type in ('horizontal', 'vertical'):
                         curve, curve_err = get_curve(op)
                         if curve_err:
@@ -724,22 +1324,33 @@ try:
                             results.append(f"{action}:OK")
                 elif action == 'add_dimension':
                     dims = s.sketchDimensions
-                    dimension_type = str(op.get('type', '')).lower()
+                    dimension_type = normalize_dimension_type(op.get('type', ''))
                     if dimension_type == 'distance':
-                        curve_one, curve_two, curve_err = get_curve_pair(op)
-                        if curve_err:
-                            results.append(f"{action}:{curve_err}")
-                        elif not hasattr(curve_one, 'startSketchPoint') or not hasattr(curve_two, 'startSketchPoint'):
-                            results.append(f"{action}:ERR_INVALID_ENTITY")
-                        else:
+                        curve, single_curve_err = get_curve(op)
+                        if not single_curve_err and hasattr(curve, 'startSketchPoint') and hasattr(curve, 'endSketchPoint') and op.get('other_curve_index') is None and not op.get('other_curve_ref') and not op.get('curve_indices') and not op.get('curve_refs'):
                             dims.addDistanceDimension(
-                                curve_one.startSketchPoint,
-                                curve_two.startSketchPoint,
+                                curve.startSketchPoint,
+                                curve.endSketchPoint,
                                 get_dimension_orientation(op.get('orientation')),
                                 get_text_point(op),
                                 bool(op.get('is_driving', True)),
                             )
                             results.append(f"{action}:OK")
+                        else:
+                            curve_one, curve_two, curve_err = get_curve_pair(op)
+                            if curve_err:
+                                results.append(f"{action}:{curve_err}")
+                            elif not hasattr(curve_one, 'startSketchPoint') or not hasattr(curve_two, 'startSketchPoint'):
+                                results.append(f"{action}:ERR_INVALID_ENTITY")
+                            else:
+                                dims.addDistanceDimension(
+                                    curve_one.startSketchPoint,
+                                    curve_two.startSketchPoint,
+                                    get_dimension_orientation(op.get('orientation')),
+                                    get_text_point(op),
+                                    bool(op.get('is_driving', True)),
+                                )
+                                results.append(f"{action}:OK")
                     elif dimension_type == 'radial':
                         curve, curve_err = get_curve(op)
                         if curve_err:
@@ -768,7 +1379,8 @@ try:
                 else:
                     results.append(f"{action}:ERR_UNKNOWN_ACTION")
             except Exception as e:
-                results.append(f"{action}:ERR:{str(e)}")
+                health_message = get_sketch_health_message()
+                results.append(f"{action}:ERR:{health_message if health_message else str(e)}")
         returnValue.append(",".join(results) if results else "OK")
     else:
         returnValue.append("ERR_SKETCH_NOT_FOUND")

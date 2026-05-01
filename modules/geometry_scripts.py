@@ -1155,6 +1155,207 @@ try:
                     results.append(f"{action}:OK")
                 else:
                     results.append(f"{action}:ERR_VERIFICATION_FAILED")
+            elif action == 'create_loft':
+                sketches, owner_comp, err = resolve_multi_sketch_context(op['sketch_names'], op.get('component_name'), op.get('component_path'))
+                if not sketches or len(sketches) < 2: results.append(f"{action}:ERR_MIN_PROFILES"); continue
+                owner_comp = activate_component_context(owner_comp)
+                lofts = owner_comp.features.loftFeatures
+                op_type = {'Join': 0, 'Cut': 1, 'Intersect': 2, 'NewBody': 3, 'NewComponent': 4}.get(op.get('op', 'NewBody'), 3)
+                loft_in = lofts.createInput(op_type)
+                for sk in sketches:
+                    if sk.profiles.count > 0: loft_in.loftSections.add(sk.profiles.item(0))
+                if 'centerline_sketch' in op:
+                    cl_sk, _, _ = resolve_sketch_context(op['centerline_sketch'], op.get('component_name'), op.get('component_path'))
+                    if cl_sk and cl_sk.sketchCurves.count > 0:
+                        loft_in.centerLineOrRails.addCenterLine(
+                            owner_comp.features.createPath(cl_sk.sketchCurves.item(0))
+                        )
+                loft_feat = lofts.add(loft_in)
+                if loft_feat.bodies.count > 0 and op_type in (3, 4):
+                    loft_feat.bodies.item(0).name = ensure_unique_body_name(owner_comp, pick_body_name(op, 'Loft', sketches[0].name))
+                results.append(f"{action}:OK")
+            elif action == 'create_sweep':
+                prof_sk, owner_comp, p_err = resolve_sketch_context(op['profile_sketch'], op.get('component_name'), op.get('component_path'))
+                path_sk, _, path_err = resolve_sketch_context(op['path_sketch'], op.get('component_name'), op.get('component_path'))
+                if not prof_sk or not path_sk: results.append(f"{action}:ERR_INPUT_NOT_FOUND"); continue
+                owner_comp = activate_component_context(owner_comp)
+                sweeps = owner_comp.features.sweepFeatures
+                prof = prof_sk.profiles.item(0)
+                path = owner_comp.features.createPath(path_sk.sketchCurves.item(0))
+                op_type = {'Join': 0, 'Cut': 1, 'Intersect': 2, 'NewBody': 3, 'NewComponent': 4}.get(op.get('op', 'NewBody'), 3)
+                sweep_in = sweeps.createInput(prof, path, op_type)
+                sweep_in.taperAngle = adsk.core.ValueInput.createByReal(op.get('taper', 0))
+                sweep_in.twistAngle = adsk.core.ValueInput.createByReal(op.get('twist', 0))
+                sweep_feat = sweeps.add(sweep_in)
+                if sweep_feat.bodies.count > 0 and op_type in (3, 4):
+                    sweep_feat.bodies.item(0).name = ensure_unique_body_name(owner_comp, pick_body_name(op, 'Sweep', prof_sk.name))
+                results.append(f"{action}:OK")
+            elif action == 'create_revolve':
+                prof_sk, owner_comp, p_err = resolve_sketch_context(op['profile_sketch'], op.get('component_name'), op.get('component_path'))
+                if not prof_sk: results.append(f"{action}:ERR_INPUT_NOT_FOUND"); continue
+                owner_comp = activate_component_context(owner_comp)
+                axis_entity = None
+                if 'axis_sketch' in op:
+                    ax_sk, _, _ = resolve_sketch_context(op['axis_sketch'], op.get('component_name'), op.get('component_path'))
+                    if ax_sk and ax_sk.sketchCurves.sketchLines.count > 0: axis_entity = ax_sk.sketchCurves.sketchLines.item(0)
+                if not axis_entity:
+                    ax_name = op.get('axis', 'z').lower()
+                    axis_entity = owner_comp.xConstructionAxis if ax_name == 'x' else owner_comp.yConstructionAxis if ax_name == 'y' else owner_comp.zConstructionAxis
+                angle = adsk.core.ValueInput.createByReal(op.get('angle', 6.283185))
+                revolves = owner_comp.features.revolveFeatures
+                op_type = {'Join': 0, 'Cut': 1, 'Intersect': 2, 'NewBody': 3, 'NewComponent': 4}.get(op.get('op', 'NewBody'), 3)
+                rev_in = revolves.createInput(prof_sk.profiles.item(0), axis_entity, op_type)
+                rev_in.setAngleExtent(False, angle)
+                rev_feat = revolves.add(rev_in)
+                if rev_feat.bodies.count > 0 and op_type in (3, 4):
+                    rev_feat.bodies.item(0).name = ensure_unique_body_name(owner_comp, pick_body_name(op, 'Revolve', prof_sk.name))
+                results.append(f"{action}:OK")
+            elif action == 'create_hole':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                owner_comp = activate_component_context(owner_comp)
+                face_index = op.get('face_index')
+                if face_index is None:
+                    planar_face = next((f for f in target.faces if f.geometry.surfaceType == adsk.core.SurfaceTypes.PlaneSurfaceType), None)
+                    face = planar_face if planar_face else (target.faces.item(0) if target.faces.count > 0 else None)
+                else:
+                    face_index = int(face_index)
+                    if face_index < 0 or face_index >= target.faces.count:
+                        results.append(f"{action}:ERR_FACE_INDEX")
+                        continue
+                    face = target.faces.item(face_index)
+                if not face:
+                    results.append(f"{action}:ERR_FACE_INDEX")
+                    continue
+
+                hole_feats = owner_comp.features.holeFeatures
+                h_type = str(op.get('hole_type', 'simple')).lower()
+                h_dia = adsk.core.ValueInput.createByReal(float(op.get('dia', op.get('diameter'))))
+
+                if h_type == 'counterbore':
+                    cb_dia = adsk.core.ValueInput.createByReal(float(op['cb_dia']))
+                    cb_depth = adsk.core.ValueInput.createByReal(float(op['cb_depth']))
+                    h_in = hole_feats.createCounterboreInput(h_dia, cb_dia, cb_depth)
+                elif h_type == 'countersink':
+                    cs_dia = adsk.core.ValueInput.createByReal(float(op['cs_dia']))
+                    cs_angle = adsk.core.ValueInput.createByReal(float(op.get('cs_angle', 1.570796)))
+                    h_in = hole_feats.createCountersinkInput(h_dia, cs_dia, cs_angle)
+                else:
+                    h_in = hole_feats.createSimpleInput(h_dia)
+
+                h_in.setPositionByPoint(face, adsk.core.Point3D.create(float(op.get('x', 0)), float(op.get('y', 0)), 0))
+                if bool(op.get('through_all', False)):
+                    h_in.setAllExtent()
+                else:
+                    h_in.setDistanceExtent(adsk.core.ValueInput.createByReal(float(op['depth'])))
+                if bool(op.get('is_flat', False)):
+                    h_in.tipAngle = adsk.core.ValueInput.createByString("180 deg")
+                hole_feats.add(h_in)
+                results.append(f"{action}:OK")
+            elif action == 'draft':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                owner_comp = activate_component_context(owner_comp)
+                face_index = int(op.get('face_index', 0))
+                if face_index < 0 or face_index >= target.faces.count:
+                    results.append(f"{action}:ERR_FACE_INDEX")
+                    continue
+                pull_plane_name = str(op.get('pull_plane', 'XY')).upper()
+                pull_plane = {
+                    'XY': owner_comp.xYConstructionPlane,
+                    'XZ': owner_comp.xZConstructionPlane,
+                    'YZ': owner_comp.yZConstructionPlane,
+                }.get(pull_plane_name)
+                if not pull_plane:
+                    results.append(f"{action}:ERR_TOOL")
+                    continue
+                faces = [target.faces.item(face_index)]
+                draft_input = owner_comp.features.draftFeatures.createInput(
+                    faces,
+                    pull_plane,
+                    bool(op.get('is_tangent_chain', True))
+                )
+                draft_input.setSingleAngle(bool(op.get('is_symmetric', False)), adsk.core.ValueInput.createByReal(float(op['angle'])))
+                if op.get('flip_direction') is not None:
+                    draft_input.isDirectionFlipped = bool(op.get('flip_direction'))
+                owner_comp.features.draftFeatures.add(draft_input)
+                results.append(f"{action}:OK")
+            elif action == 'circular_pattern':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                owner_comp = activate_component_context(owner_comp)
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                axis_name = str(op.get('axis', 'Z')).upper()
+                axis = {'X': owner_comp.xConstructionAxis, 'Y': owner_comp.yConstructionAxis, 'Z': owner_comp.zConstructionAxis}.get(axis_name, owner_comp.zConstructionAxis)
+                patterns = owner_comp.features.circularPatternFeatures
+                p_in = patterns.createInput(ents, axis)
+                p_in.quantity = adsk.core.ValueInput.createByReal(float(op['count']))
+                p_in.totalAngle = adsk.core.ValueInput.createByReal(float(op.get('total_angle', 6.283185)))
+                patterns.add(p_in)
+                results.append(f"{action}:OK")
+            elif action == 'rectangular_pattern':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                owner_comp = activate_component_context(owner_comp)
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                axis_one_name = str(op.get('axis_one', 'X')).upper()
+                axis_two_name = str(op.get('axis_two', 'Y')).upper()
+                axis_map = {'X': owner_comp.xConstructionAxis, 'Y': owner_comp.yConstructionAxis, 'Z': owner_comp.zConstructionAxis}
+                patterns = owner_comp.features.rectangularPatternFeatures
+                p_in = patterns.createInput(
+                    ents,
+                    axis_map.get(axis_one_name, owner_comp.xConstructionAxis),
+                    adsk.core.ValueInput.createByReal(float(op['count_x'])),
+                    adsk.core.ValueInput.createByReal(float(op['dist_x'])),
+                    adsk.fusion.PatternDistanceType.SpacingPatternDistanceType
+                )
+                count_y = int(op.get('count_y', 1))
+                if count_y > 1:
+                    p_in.setDirectionTwo(
+                        axis_map.get(axis_two_name, owner_comp.yConstructionAxis),
+                        adsk.core.ValueInput.createByReal(count_y),
+                        adsk.core.ValueInput.createByReal(float(op.get('dist_y', 0)))
+                    )
+                patterns.add(p_in)
+                results.append(f"{action}:OK")
+            elif action == 'path_pattern':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
+                    results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
+                    continue
+                path_sk, path_owner, path_err = resolve_sketch_context(op['path_sketch'], op.get('component_name'), op.get('component_path'))
+                if not path_sk or path_sk.sketchCurves.count < 1:
+                    results.append(f"{action}:ERR_SKETCH")
+                    continue
+                if path_owner != owner_comp:
+                    results.append(f"{action}:ERR_OWNER_MISMATCH")
+                    continue
+                owner_comp = activate_component_context(owner_comp)
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                path = owner_comp.features.createPath(path_sk.sketchCurves.item(0))
+                patterns = owner_comp.features.pathPatternFeatures
+                p_in = patterns.createInput(
+                    ents,
+                    path,
+                    adsk.core.ValueInput.createByReal(float(op['count'])),
+                    adsk.core.ValueInput.createByReal(float(op['dist'])),
+                    adsk.fusion.PatternDistanceType.ExtentPatternDistanceType
+                )
+                if op.get('is_symmetric') is not None:
+                    p_in.isSymmetric = bool(op.get('is_symmetric'))
+                patterns.add(p_in)
+                results.append(f"{action}:OK")
 
             elif action == 'fillet':
                 target = find_body_recursive(root, op['body'])
@@ -1255,14 +1456,14 @@ try:
                 if not target or not body_in_requested_scope(target, op.get('component_name'), op.get('component_path')):
                     results.append(f"{action}:{body_lookup_error(op['body'], op.get('component_name'), op.get('component_path'))}")
                     continue
+                
+                # Activate owner component to ensure deletion works
+                owner_comp = activate_component_context(owner_comp)
+                
                 target_name = target.name
                 deleted = target.deleteMe()
                 if not deleted:
                     results.append(f"{action}:ERR_DELETE_FAILED")
-                    continue
-                remaining, _, _ = resolve_body_context(target_name, op.get('component_name'), op.get('component_path'))
-                if remaining and body_in_requested_scope(remaining, op.get('component_name'), op.get('component_path')):
-                    results.append(f"{action}:ERR_VERIFICATION_FAILED")
                 else:
                     results.append(f"{action}:OK")
 
@@ -1286,7 +1487,24 @@ try:
                 ents = adsk.core.ObjectCollection.create()
                 ents.add(target)
                 transform = adsk.core.Matrix3D.create()
-                transform.translation = adsk.core.Vector3D.create(op.get('x', 0), op.get('y', 0), op.get('z', 0))
+                if any(k in op for k in ['x', 'y', 'z']):
+                    transform.translation = adsk.core.Vector3D.create(op.get('x', 0), op.get('y', 0), op.get('z', 0))
+                
+                # Add rotation support
+                if any(k in op for k in ['rx', 'ry', 'rz']):
+                    if op.get('rx'):
+                        rot = adsk.core.Matrix3D.create()
+                        rot.setToRotation(op['rx'], adsk.core.Vector3D.create(1,0,0), target.physicalProperties.centerOfMass)
+                        transform.transformBy(rot)
+                    if op.get('ry'):
+                        rot = adsk.core.Matrix3D.create()
+                        rot.setToRotation(op['ry'], adsk.core.Vector3D.create(0,1,0), target.physicalProperties.centerOfMass)
+                        transform.transformBy(rot)
+                    if op.get('rz'):
+                        rot = adsk.core.Matrix3D.create()
+                        rot.setToRotation(op['rz'], adsk.core.Vector3D.create(0,0,1), target.physicalProperties.centerOfMass)
+                        transform.transformBy(rot)
+
                 moves = owner_comp.features.moveFeatures
                 move_input = moves.createInput(ents, transform)
                 moves.add(move_input)
@@ -1305,10 +1523,248 @@ try:
                 dz = op['z'] - current_center.z
                 transform = adsk.core.Matrix3D.create()
                 transform.translation = adsk.core.Vector3D.create(dx, dy, dz)
+
+                # Add rotation support for absolute move (rotates around center after translation)
+                if any(k in op for k in ['rx', 'ry', 'rz']):
+                    target_pt = adsk.core.Point3D.create(op['x'], op['y'], op['z'])
+                    if op.get('rx'):
+                        rot = adsk.core.Matrix3D.create()
+                        rot.setToRotation(op['rx'], adsk.core.Vector3D.create(1,0,0), target_pt)
+                        transform.transformBy(rot)
+                    if op.get('ry'):
+                        rot = adsk.core.Matrix3D.create()
+                        rot.setToRotation(op['ry'], adsk.core.Vector3D.create(0,1,0), target_pt)
+                        transform.transformBy(rot)
+                    if op.get('rz'):
+                        rot = adsk.core.Matrix3D.create()
+                        rot.setToRotation(op['rz'], adsk.core.Vector3D.create(0,0,1), target_pt)
+                        transform.transformBy(rot)
+
                 moves = owner_comp.features.moveFeatures
                 move_input = moves.createInput(ents, transform)
                 moves.add(move_input)
                 results.append(f"{action}:OK")
+
+            elif action == 'execute_python':
+                # Dynamically execute script provided in operation
+                script_code = op.get('script')
+                if script_code:
+                    exec_globals = {
+                        'adsk': adsk, 
+                        'app': app, 
+                        'design': design, 
+                        'root': root, 
+                        'active_comp': active_comp,
+                        'params': op.get('params', {}),
+                        'returnValue': []
+                    }
+                    exec(script_code, exec_globals)
+                    res_val = exec_globals.get('returnValue')
+                    results.append(f"{action}:OK:{res_val[0] if res_val else ''}")
+                else:
+                    results.append(f"{action}:ERR_NO_SCRIPT")
+
+            elif action == 'pattern_feature':
+                feature, feature_owner = find_named_feature(op.get('feature_name'), op.get('component_name'), op.get('component_path'))
+                if not feature:
+                    results.append(f"{action}:ERR_FEATURE_NOT_FOUND")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(feature)
+                axis_name = str(op.get('axis', 'Z')).upper()
+                axis = {'X': feature_owner.xConstructionAxis, 'Y': feature_owner.yConstructionAxis, 'Z': feature_owner.zConstructionAxis}.get(axis_name, feature_owner.zConstructionAxis)
+                patterns = feature_owner.features.circularPatternFeatures
+                p_in = patterns.createInput(ents, axis)
+                p_in.quantity = adsk.core.ValueInput.createByReal(float(op['count']))
+                p_in.totalAngle = adsk.core.ValueInput.createByReal(float(op.get('total_angle', 6.283185)))
+                patterns.add(p_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'rectangular_pattern_feature':
+                feature, feature_owner = find_named_feature(op.get('feature_name'), op.get('component_name'), op.get('component_path'))
+                if not feature:
+                    results.append(f"{action}:ERR_FEATURE_NOT_FOUND")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(feature)
+                axis_one_name = str(op.get('axis_one', 'X')).upper()
+                axis_two_name = str(op.get('axis_two', 'Y')).upper()
+                axis_map = {'X': feature_owner.xConstructionAxis, 'Y': feature_owner.yConstructionAxis, 'Z': feature_owner.zConstructionAxis}
+                patterns = feature_owner.features.rectangularPatternFeatures
+                p_in = patterns.createInput(
+                    ents,
+                    axis_map.get(axis_one_name, feature_owner.xConstructionAxis),
+                    adsk.core.ValueInput.createByReal(float(op['count_x'])),
+                    adsk.core.ValueInput.createByReal(float(op['dist_x'])),
+                    adsk.fusion.PatternDistanceType.SpacingPatternDistanceType
+                )
+                count_y = int(op.get('count_y', 1))
+                if count_y > 1:
+                    p_in.setDirectionTwo(
+                        axis_map.get(axis_two_name, feature_owner.yConstructionAxis),
+                        adsk.core.ValueInput.createByReal(count_y),
+                        adsk.core.ValueInput.createByReal(float(op.get('dist_y', 0)))
+                    )
+                patterns.add(p_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'mirror_feature':
+                feature, feature_owner = find_named_feature(op.get('feature_name'), op.get('component_name'), op.get('component_path'))
+                if not feature:
+                    results.append(f"{action}:ERR_FEATURE_NOT_FOUND")
+                    continue
+                plane_name = str(op.get('plane', 'XY')).upper()
+                mirror_plane = {
+                    'XY': feature_owner.xYConstructionPlane,
+                    'XZ': feature_owner.xZConstructionPlane,
+                    'YZ': feature_owner.yZConstructionPlane,
+                }.get(plane_name)
+                if not mirror_plane:
+                    results.append(f"{action}:ERR_TOOL")
+                    continue
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(feature)
+                mirrors = feature_owner.features.mirrorFeatures
+                m_in = mirrors.createInput(ents, mirror_plane)
+                mirrors.add(m_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'create_construction_plane':
+                target_comp = get_default_target_component(op)
+                if not target_comp: results.append(f"{action}:ERR_COMPONENT"); continue
+                planes = target_comp.constructionPlanes
+                plane_in = planes.createInput()
+                plane_type = op.get('plane_type', 'offset')
+                if plane_type == 'offset':
+                    base_plane_name = str(op.get('base_plane', 'XY')).upper()
+                    base_plane = {'XY': target_comp.xYConstructionPlane, 'XZ': target_comp.xZConstructionPlane, 'YZ': target_comp.yZConstructionPlane}.get(base_plane_name, target_comp.xYConstructionPlane)
+                    plane_in.setByOffset(base_plane, adsk.core.ValueInput.createByReal(float(op.get('offset', 0))))
+                elif plane_type == 'angle':
+                    axis_name = str(op.get('axis', 'X')).upper()
+                    axis = {'X': target_comp.xConstructionAxis, 'Y': target_comp.yConstructionAxis, 'Z': target_comp.zConstructionAxis}.get(axis_name, target_comp.xConstructionAxis)
+                    plane_in.setByAngle(axis, adsk.core.ValueInput.createByReal(float(op.get('angle', 0))), target_comp.xYConstructionPlane) # PlanarEntity as ref
+                planes.add(plane_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'create_construction_axis':
+                target_comp = get_default_target_component(op)
+                if not target_comp: results.append(f"{action}:ERR_COMPONENT"); continue
+                axes = target_comp.constructionAxes
+                axis_in = axes.createInput()
+                axis_type = op.get('axis_type', 'two_point')
+                if axis_type == 'two_point':
+                    pt1 = adsk.core.Point3D.create(op.get('x1',0), op.get('y1',0), op.get('z1',0))
+                    pt2 = adsk.core.Point3D.create(op.get('x2',1), op.get('y2',1), op.get('z2',1))
+                    sk = target_comp.sketches.add(target_comp.xYConstructionPlane)
+                    pt1_sk = sk.sketchPoints.add(pt1)
+                    pt2_sk = sk.sketchPoints.add(pt2)
+                    axis_in.setByTwoPoints(pt1_sk, pt2_sk)
+                elif axis_type == 'cylinder':
+                    target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                    if not target: results.append(f"{action}:ERR_BODY"); continue
+                    face_index = int(op.get('face_index', 0))
+                    if face_index >= target.faces.count: results.append(f"{action}:ERR_FACE_INDEX"); continue
+                    face = target.faces.item(face_index)
+                    axis_in.setByCylinderOrCone(face)
+                axes.add(axis_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'create_thread':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target or not owner_comp: results.append(f"{action}:ERR_BODY"); continue
+                face_index = int(op.get('face_index', 0))
+                if face_index >= target.faces.count: results.append(f"{action}:ERR_FACE_INDEX"); continue
+                face = target.faces.item(face_index)
+                threads = owner_comp.features.threadFeatures
+                thread_data = owner_comp.parentDesign.threadDataQuery
+                thread_types = thread_data.allThreadTypes
+                t_type = op.get('thread_type', thread_types[0])
+                all_sizes = thread_data.allSizes(t_type)
+                size = op.get('size', all_sizes[0])
+                all_designations = thread_data.allDesignations(t_type, size)
+                designation = op.get('designation', all_designations[0])
+                all_classes = thread_data.allClasses(False, t_type, designation)
+                t_class = op.get('thread_class', all_classes[0])
+                t_info = threads.createThreadInfo(False, t_type, designation, t_class)
+                faces = adsk.core.ObjectCollection.create()
+                faces.add(face)
+                t_in = threads.createInput(faces, t_info)
+                t_in.isModeled = bool(op.get('is_modeled', False))
+                threads.add(t_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'create_coil':
+                target_comp = get_default_target_component(op)
+                if not target_comp: results.append(f"{action}:ERR_COMPONENT"); continue
+                center_coords = op.get('center', [0,0,0])
+                center = adsk.core.Point3D.create(op.get('x', center_coords[0]), op.get('y', center_coords[1]), op.get('z', center_coords[2]))
+                coils = target_comp.features.coilFeatures
+                c_in = coils.createInput(target_comp.xYConstructionPlane, center)
+                c_in.diameter = adsk.core.ValueInput.createByReal(float(op.get('dia', 1.0)))
+                c_in.height = adsk.core.ValueInput.createByReal(float(op.get('height', 5.0)))
+                c_in.pitch = adsk.core.ValueInput.createByReal(float(op.get('pitch', 1.0)))
+                c_in.isSolid = True
+                c_in.operation = {'join': 0, 'cut': 1, 'intersect': 2, 'newbody': 3}.get(op.get('op', 'newbody').lower(), 3)
+                coils.add(c_in)
+                results.append(f"{action}:OK")
+
+            elif action == 'select_by_property':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                if not target: results.append(f"{action}:ERR_BODY"); continue
+                prop = op.get('property', 'area')
+                min_val = float(op.get('min_val', 0))
+                max_val = float(op.get('max_val', 999999))
+                indices = []
+                if prop == 'area':
+                    for i in range(target.faces.count):
+                        if min_val <= target.faces.item(i).area <= max_val:
+                            indices.append(i)
+                elif prop == 'length':
+                    for i in range(target.edges.count):
+                        if min_val <= target.edges.item(i).length <= max_val:
+                            indices.append(i)
+                results.append(f"{action}:OK:{','.join(map(str, indices))}")
+
+            elif action == 'align_to_normal':
+                target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))
+                target_face_body, _, _ = resolve_body_context(op['target_body'], op.get('component_name'), op.get('component_path'))
+                if not target or not target_face_body: results.append(f"{action}:ERR_BODY"); continue
+                face_index = int(op.get('face_index', 0))
+                if face_index >= target_face_body.faces.count: results.append(f"{action}:ERR_FACE_INDEX"); continue
+                face = target_face_body.faces.item(face_index)
+                evaluator = face.evaluator
+                _, normal = evaluator.getNormalAtPoint(face.pointOnFace)
+                
+                ents = adsk.core.ObjectCollection.create()
+                ents.add(target)
+                
+                align_axis = op.get('align_axis', 'Z').upper()
+                vec = adsk.core.Vector3D.create(1 if align_axis == 'X' else 0, 1 if align_axis == 'Y' else 0, 1 if align_axis == 'Z' else 0)
+                
+                angle = vec.angleTo(normal)
+                axis = vec.crossProduct(normal)
+                
+                transform = adsk.core.Matrix3D.create()
+                if axis.length > 0.001:
+                    rot = adsk.core.Matrix3D.create()
+                    rot.setToRotation(angle, axis, target.physicalProperties.centerOfMass)
+                    transform.transformBy(rot)
+                
+                moves = owner_comp.features.moveFeatures
+                move_input = moves.createInput(ents, transform)
+                moves.add(move_input)
+                results.append(f"{action}:OK")
+
+            elif action == 'apply_taper_to_extrude':
+                feature, feature_owner = find_named_feature(op.get('feature_name'), op.get('component_name'), op.get('component_path'))
+                if not feature or feature.objectType != adsk.fusion.ExtrudeFeature.classType():
+                    results.append(f"{action}:ERR_FEATURE_NOT_FOUND")
+                    continue
+                try:
+                    feature.taperAngle = adsk.core.ValueInput.createByReal(float(op.get('taper', 0)))
+                    results.append(f"{action}:OK")
+                except:
+                    results.append(f"{action}:ERR_API")
 
             elif action == 'scale_body':
                 target, owner_comp, target_err = resolve_body_context(op['body'], op.get('component_name'), op.get('component_path'))

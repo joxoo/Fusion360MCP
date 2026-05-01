@@ -32,7 +32,11 @@ SKETCH_ERROR_MAP = {
     "ERR_SKETCH_NOT_FOUND": localized_error("sketch_not_found"),
     "ERR_NOT_FOUND": "Error: Target body or sketch not found.",
     "ERR_BODY": localized_error("body_not_found"),
-    "ERR_CURVE_INDEX_REQUIRED": "Error: curve_index is required for this sketch action.",
+    "ERR_BODY_NOT_FOUND": localized_error("body_not_found"),
+    "ERR_COMPONENT_NOT_FOUND": localized_error("component_not_found"),
+    "ERR_FACE_INDEX": "Error: face_index is out of range for the selected body.",
+    "ERR_FACE_INDEX_REQUIRED": "Error: face_index or face_indices is required for this sketch action.",
+    "ERR_CURVE_INDEX_REQUIRED": "Error: curve_index/curve_ref is required for single-entity actions, or curve_indices/curve_refs for pair-based actions.",
     "ERR_CURVE_NOT_FOUND": "Error: Target sketch curve not found.",
     "ERR_CURVE_SELECTION_REQUIRED": "Error: Select at least one sketch curve for this action.",
     "ERR_MIRROR_AXIS_REQUIRED": "Error: mirror_curve_index or mirror_curve_ref is required for mirror_entities.",
@@ -46,6 +50,8 @@ SKETCH_ERROR_MAP = {
     "ERR_INVALID_ENTITY": "Error: The selected sketch entities are not valid for this action.",
     "ERR_UNKNOWN_CONSTRAINT_TYPE": "Error: Unknown sketch constraint type.",
     "ERR_UNKNOWN_DIMENSION_TYPE": "Error: Unknown sketch dimension type.",
+    "ERR_UNKNOWN_PROJECTION_TYPE": "Error: Unknown projection_type. Use closest_point or along_vector.",
+    "ERR_DIRECTION_REQUIRED": "Error: direction_axis, direction_curve_index, or direction_curve_ref is required for along_vector projection.",
     "ERR_EMPTY": "Error: The sketch does not contain editable geometry for this action.",
 }
 
@@ -228,31 +234,31 @@ def draw_slot_logic(sketch_name: str, x1: float, y1: float, x2: float, y2: float
     except FusionBridgeError as e: return bridge_error_message(e)
 
 def edit_sketch_logic(
-    sketch_name: str = None,
-    operations: list[dict] = None,
+    sketch_name: str = "",
+    operations: list = None,
     lang: str = "en",
     sketch_ref: dict = None,
-    component_name: str = None,
-    component_path: str = None,
+    component_name: str = "",
+    component_path: str = "",
 ):
     """
     Executes multiple drawing operations in a single sketch.
     Each operation should be a dict with an 'action' key and required parameters.
     Supported actions include additive and corrective sketch edits such as
     draw_line, draw_circle, draw_rectangle, draw_polygon, draw_arc, draw_spline,
-    draw_slot, draw_ellipse, project_geometry, offset, circular_pattern,
-    rectangular_pattern, delete_curve, move_entities, copy_entities,
-    mirror_entities,
-    set_construction, trim, clear_sketch, add_constraint, remove_constraint,
-    add_dimension, set_dimension, and delete_dimension. The target sketch can
-    be passed either as sketch_name or as sketch_ref from
-    analyze_design/get_assembly_tree.
+    draw_slot, draw_ellipse, draw_text, import_svg, create_spun_profile,
+    project_geometry, project_cut_edges, include_geometry, project_to_surface,
+    redefine, offset, circular_pattern, rectangular_pattern, delete_curve,
+    move_entities, copy_entities, mirror_entities, set_construction, trim,
+    clear_sketch, add_constraint, remove_constraint, add_dimension,
+    set_dimension, and delete_dimension. The target sketch can be passed either
+    as sketch_name or as sketch_ref from analyze_design/get_assembly_tree.
     """
     try:
         sketch_ref = sketch_ref or {}
-        resolved_sketch_name = sketch_name or sketch_ref.get("sketch") or sketch_ref.get("name")
-        resolved_component_name = component_name or sketch_ref.get("component_name")
-        resolved_component_path = component_path or sketch_ref.get("component_path")
+        resolved_sketch_name = sketch_name if sketch_name else (sketch_ref.get("sketch") or sketch_ref.get("name"))
+        resolved_component_name = component_name if component_name else sketch_ref.get("component_name")
+        resolved_component_path = component_path if component_path else sketch_ref.get("component_path")
         operations = operations or []
 
         res = execute_fusion_script(
@@ -260,8 +266,8 @@ def edit_sketch_logic(
             {
                 "sketch": resolved_sketch_name,
                 "operations": operations,
-                "component_name": resolved_component_name,
-                "component_path": resolved_component_path,
+                "component_name": resolved_component_name if resolved_component_name else None,
+                "component_path": resolved_component_path if resolved_component_path else None,
             },
             use_common=["find_body"],
         )

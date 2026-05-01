@@ -76,6 +76,8 @@ def register_compact_tools(mcp: FastMCP) -> None:
     register_tool(mcp, "import_mesh", import_mesh_logic)
     register_tool(mcp, "edit_mesh", edit_mesh_logic)
     register_tool(mcp, "export_model", export_model_logic)
+    from modules.geometry import execute_python_script_logic
+    register_tool(mcp, "execute_python_script", execute_python_script_logic)
 
 
 def register_api_profile(mcp: FastMCP, api_profile: str) -> None:

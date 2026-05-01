@@ -22,6 +22,14 @@ def build_create_loft_script() -> str:
             loft_in = lofts.createInput(adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
             for p in profiles:
                 loft_in.loftSections.add(p)
+            
+            # Advanced: Centerline support
+            if 'centerline_sketch' in params:
+                cl_sk, _, cl_err = resolve_sketch_context(params['centerline_sketch'], params.get('component_name'), params.get('component_path'))
+                if cl_sk and cl_sk.sketchCurves.count > 0:
+                    path = owner_comp.features.createPath(cl_sk.sketchCurves.item(0))
+                    loft_in.centerLineOrRails.addCenterLine(path)
+            
             loft_feat = lofts.add(loft_in)
             returnValue.append(loft_feat.bodies.item(0).name)
 except Exception as e:
@@ -49,9 +57,54 @@ def build_create_sweep_script() -> str:
         prof = prof_sk.profiles.item(0)
         path = owner_comp.features.createPath(path_sk.sketchCurves.item(0))
         sweeps = owner_comp.features.sweepFeatures
+        
+        # Advanced: Taper and Twist
+        taper = adsk.core.ValueInput.createByReal(params.get('taper', 0))
+        twist = adsk.core.ValueInput.createByReal(params.get('twist', 0))
+        
         sweep_in = sweeps.createInput(prof, path, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+        sweep_in.taperAngle = taper
+        sweep_in.twistAngle = twist
+        
         sweep_feat = sweeps.add(sweep_in)
         returnValue.append(sweep_feat.bodies.item(0).name)
+    else:
+        returnValue.append("ERR_INPUT_NOT_FOUND")
+except Exception as e:
+    returnValue.append(f"ERR_API:{str(e)}")"""
+
+
+def build_create_revolve_script() -> str:
+    return """try:
+    prof_sk, owner_comp, profile_err = resolve_sketch_context(
+        params['profile_sketch'],
+        params.get('component_name'),
+        params.get('component_path')
+    )
+    if profile_err == "ERR_COMPONENT":
+        returnValue.append("ERR_COMPONENT")
+    elif prof_sk and prof_sk.profiles.count > 0:
+        prof = prof_sk.profiles.item(0)
+        
+        # Axis can be a sketch line or construction axis
+        axis_entity = None
+        if 'axis_sketch' in params:
+            ax_sk, _, _ = resolve_sketch_context(params['axis_sketch'], params.get('component_name'), params.get('component_path'))
+            if ax_sk and ax_sk.sketchCurves.sketchLines.count > 0:
+                axis_entity = ax_sk.sketchCurves.sketchLines.item(0)
+        
+        if not axis_entity:
+            axis_name = params.get('axis', 'z')
+            if axis_name.lower() == 'x': axis_entity = owner_comp.xConstructionAxis
+            elif axis_name.lower() == 'y': axis_entity = owner_comp.yConstructionAxis
+            else: axis_entity = owner_comp.zConstructionAxis
+            
+        angle = adsk.core.ValueInput.createByReal(params.get('angle', 6.283185)) # Default 360 deg
+        revolves = owner_comp.features.revolveFeatures
+        rev_in = revolves.createInput(prof, axis_entity, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+        rev_in.setAngleExtent(False, angle)
+        rev_feat = revolves.add(rev_in)
+        returnValue.append(rev_feat.bodies.item(0).name)
     else:
         returnValue.append("ERR_INPUT_NOT_FOUND")
 except Exception as e:

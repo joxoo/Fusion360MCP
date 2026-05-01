@@ -46,15 +46,6 @@ except Exception as e:
 def build_edit_assembly_script() -> str:
     return """
 try:
-    def resolve_joint_component(payload, name_key, path_key, legacy_key):
-        comp = resolve_component_context(payload.get(name_key), payload.get(path_key))
-        if comp:
-            return comp
-        legacy_name = payload.get(legacy_key)
-        if legacy_name:
-            return resolve_component_context(legacy_name, None)
-        return None
-
     def normalize_component_path(path_value):
         if not path_value:
             return ""
@@ -63,10 +54,8 @@ try:
             path_text = path_text[1:]
         return path_text
 
-    def resolve_target_occurrence(payload):
-        component_path = normalize_component_path(payload.get('target_component_path') or payload.get('component_path'))
-        component_name = payload.get('target_component_name') or payload.get('component_name')
-
+    def resolve_occurrence_by_reference(component_name=None, component_path=None):
+        component_path = normalize_component_path(component_path)
         if component_path:
             if component_path == "Root":
                 return None, "ERR_ROOT_COMPONENT"
@@ -98,6 +87,38 @@ try:
             return None, "ERR_COMPONENT"
 
         return None, "ERR_COMPONENT"
+
+    def resolve_target_occurrence(payload):
+        return resolve_occurrence_by_reference(
+            payload.get('target_component_name') or payload.get('component_name'),
+            payload.get('target_component_path') or payload.get('component_path'),
+        )
+
+    def resolve_joint_occurrence(payload, name_key, path_key, legacy_key):
+        occurrence, occ_err = resolve_occurrence_by_reference(
+            payload.get(name_key),
+            payload.get(path_key),
+        )
+        if occurrence:
+            return occurrence, None
+        legacy_name = payload.get(legacy_key)
+        if legacy_name:
+            return resolve_occurrence_by_reference(legacy_name, None)
+        return None, occ_err or "ERR_COMPONENT"
+
+    def parse_bool(value, default_value=True):
+        if value is None:
+            return default_value
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        text = str(value).strip().lower()
+        if text in ("true", "1", "yes", "on"):
+            return True
+        if text in ("false", "0", "no", "off"):
+            return False
+        return default_value
 
     results = []
     for op in params.get('operations', []):
@@ -171,6 +192,25 @@ try:
                     else:
                         occurrence.transform = transform
                     results.append(f"{action}:OK")
+            elif action == 'create_as_built_joint':
+                occ1, occ1_err = resolve_joint_occurrence(op, 'component1_name', 'component1_path', 'c1')
+                occ2, occ2_err = resolve_joint_occurrence(op, 'component2_name', 'component2_path', 'c2')
+                if occ1 and occ2:
+                    joints = root.asBuiltJoints
+                    j_in = joints.createInput(occ1, occ2, None)
+                    jt = op.get('type', 'Rigid').lower()
+                    if jt == "revolute": j_in.setAsRevoluteJointMotion(adsk.fusion.JointDirections.ZAxisJointDirection)
+                    elif jt == "slider": j_in.setAsSliderJointMotion(adsk.fusion.JointDirections.ZAxisJointDirection)
+                    else: j_in.setAsRigidJointMotion()
+                    joints.add(j_in)
+                    results.append(f"{action}:OK")
+                else:
+                    results.append(f"{action}:{occ1_err or occ2_err or 'ERR_COMPONENT'}")
+            elif action == 'set_contact_sets':
+                design = adsk.fusion.Design.cast(app.activeProduct)
+                enable = parse_bool(op.get('enable'), True)
+                design.isContactAnalysisEnabled = enable
+                results.append(f"{action}:OK:{enable}")
             else:
                 results.append(f"{action}:ERR_UNKNOWN_ACTION")
         except Exception as e:

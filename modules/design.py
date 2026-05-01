@@ -40,13 +40,16 @@ def _reject_blocking_dialog_calls(script: str) -> str | None:
         )
     return None
 
-def manage_design_logic(action: str = "cleanup", lang: str = "en", filename: str = "model"):
+def manage_design_logic(action: str = "cleanup", filename: str = "model", lang: str = "en"):
     """
     Handles design-level operations.
     Supported actions: cleanup, restart_mcp, create_new, export_step, export_stl.
     """
     try:
-        res = execute_fusion_script(build_manage_design_script(), {"action": action, "filename": filename})
+        res = execute_fusion_script(build_manage_design_script(), {
+            "action": action, 
+            "filename": filename
+        })
         val = get_result_value(res)
         if val == "OK" or "Exported" in val:
             msg_map = {"cleanup": "design_cleaned", "restart_mcp": "mcp_restart_sent", "create_new": "document_created"}

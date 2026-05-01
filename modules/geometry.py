@@ -120,7 +120,7 @@ def create_shell_logic(body: str, thickness: float, lang: str = "en"):
         return format_response(lang, "shell_created")
     except FusionBridgeError as e: return bridge_error_message(e)
 
-def apply_3d_features_logic(operations: list[dict], lang: str = "en"):
+def apply_3d_features_logic(operations: list, lang: str = "en"):
     """
     Applies multiple 3D geometry features in a single batch.
     Supported actions include creation and corrective body edits such as extrude,
@@ -165,10 +165,19 @@ def apply_3d_features_logic(operations: list[dict], lang: str = "en"):
         return format_response(lang, "geometry_updated")
     except FusionBridgeError as e: return bridge_error_message(e)
 
+def execute_python_script_logic(script: str, params: dict = None, lang: str = "en"):
+    """Executes arbitrary Python code in Fusion 360 (Expert tool)."""
+    try:
+        res = execute_fusion_script(script, params)
+        val = get_result_value(res)
+        return f"Script executed successfully. Result: {val}"
+    except FusionBridgeError as e: return bridge_error_message(e)
+
 def register_geometry_tools(mcp):
     register_tool(mcp, "apply_3d_features", apply_3d_features_logic)
     register_tool(mcp, "edit_feature", edit_feature_logic)
     register_tool(mcp, "delete_feature", delete_feature_logic)
+    register_tool(mcp, "execute_python_script", execute_python_script_logic)
 
 def edit_feature_logic(feature_name: str, new_name: str = None, suppress: bool = None, value: str = None, lang: str = "en"):
     """Editiert ein bestehendes Feature (Name, Unterdrückung, Parameter)."""

@@ -21,7 +21,10 @@
       "validate": { "required": ["action"], "example": { "action": "validate" } },
       "scene_map": { "required": ["action"], "example": { "action": "scene_map" } },
       "physical_data": { "required": ["action"], "example": { "action": "physical_data" } },
-      "bounding_box": { "required": ["action"], "example": { "action": "bounding_box", "body": "Body1" } }
+      "bounding_box": { "required": ["action"], "example": { "action": "bounding_box", "body": "Body1" } },
+      "interference_check": { "required": ["action"], "notes": ["Detects collisions between all components"], "example": { "action": "interference_check" } },
+      "capture_view": { "required": ["action"], "example": { "action": "capture_view", "width": 1920, "height": 1080 } },
+      "capture_side": { "required": ["action"], "notes": ["Captures a right-side orthographic view"], "example": { "action": "capture_side" } }
     }
   },
   "create_sketch": {
@@ -44,31 +47,47 @@
       "You can target the sketch with sketch_name or reuse sketch_ref from analyze_design.",
       "For curve edits such as delete_curve, set_construction, or trim, prefer curve_ref from analyze_design and only fall back to raw curve_index when needed.",
       "For constraint and dimension edits, prefer constraint_ref and dimension_ref from analyze_design or validate.",
-      "When creating a sketch earlier in the workflow, keep its name semantic and stable so later edit_sketch calls can target it reliably."
+      "When creating a sketch earlier in the workflow, keep its name semantic and stable so later edit_sketch calls can target it reliably.",
+      "Sketch coordinates and distances are passed through in Fusion Design internal units. For lengths, that means centimeters unless you convert before calling."
     ],
     "actions": {
       "draw_line": { "required": ["x1", "y1", "x2", "y2"] },
       "draw_circle": { "required": ["x", "y", "r"] },
       "draw_rectangle": { "required": ["x1", "y1", "x2", "y2"] },
+      "draw_center_rectangle": { "required": ["cx", "cy", "x", "y"], "notes": ["cx and cy define the rectangle center; x and y define a corner"] },
+      "draw_three_point_rectangle": { "required": ["x1", "y1", "x2", "y2", "x3", "y3"], "notes": ["x1,y1 and x2,y2 define the base edge; x3,y3 defines the third corner side"] },
       "draw_polygon": { "required": ["cx", "cy", "r", "sides"] },
+      "draw_inscribed_polygon": { "required": ["cx", "cy", "r", "sides"], "notes": ["r is the radius from center to polygon vertices"] },
+      "draw_circumscribed_polygon": { "required": ["cx", "cy", "r", "sides"], "notes": ["r is the apothem radius from center to polygon sides"] },
+      "draw_edge_polygon": { "required": ["x1", "y1", "x2", "y2", "sides"], "notes": ["x1,y1 and x2,y2 define one polygon edge", "Optional flip switches the polygon to the opposite side of the input edge"] },
       "draw_arc": { "required": ["cx", "cy", "sx", "sy", "angle"] },
       "draw_spline": { "required": ["pts"] },
-      "draw_slot": { "required": ["x1", "y1", "x2", "y2", "width"] },
+      "draw_slot": { "required": ["x1", "y1", "x2", "y2", "width"], "notes": ["Creates a center-to-center slot", "x1,y1 and x2,y2 define the centers of the slot end arcs", "width uses Fusion Design length units, typically cm"] },
+      "draw_overall_slot": { "required": ["x1", "y1", "x2", "y2", "width"], "notes": ["Creates an overall slot", "x1,y1 and x2,y2 define the outer slot endpoints", "width uses Fusion Design length units, typically cm"] },
+      "draw_center_point_slot": { "required": ["cx", "cy", "x", "y", "width"], "notes": ["Creates a center-point slot", "cx,cy is the slot center; x,y defines direction and center-to-end distance", "width uses Fusion Design length units, typically cm"] },
       "draw_ellipse": { "required": ["cx", "cy", "mx", "my", "ox", "oy"] },
-      "project_geometry": { "required": ["body"] },
-      "offset": { "required": ["dist"] },
+      "draw_text": { "required": ["text", "x", "y"], "notes": ["Optional height defaults to 1.0 in Fusion length units", "Optional font sets the sketch text font name"] },
+      "import_svg": { "required": ["path"], "notes": ["x and y are sketch offsets in cm", "scale defaults to 1.0"], "example": { "action": "import_svg", "path": "/absolute/path/logo.svg", "x": 0, "y": 0, "scale": 1.0 } },
+      "create_spun_profile": { "required": ["body"], "notes": ["Creates a spun profile in the active sketch using Fusion Sketch.createSpunProfileInput", "Supports body or selected body face input; face_index or face_indices can target specific faces", "Optional bodies can provide multiple source bodies in one call", "axis defaults to Z but can also be set with axis_curve_index/axis_curve_ref or axis_body plus axis_edge_index", "Optional flags: flip_result, is_axis_projected, is_centerline_added, tolerance", "Available in newer Fusion API versions"], "example": { "action": "create_spun_profile", "body": "TurningBlank", "axis": "z", "is_centerline_added": true } },
+      "project_geometry": { "required": [], "notes": ["Uses Fusion Sketch.project2 when available and falls back to the retired project API on older Fusion versions", "Supported selectors: current sketch curves via curve_index/curve_indices/curve_ref/curve_refs, or model entities via body plus optional face_index/face_indices, edge_index/edge_indices, vertex_index/vertex_indices", "Optional is_linked controls whether projected geometry remains associatively linked to the source"] },
+      "project_cut_edges": { "required": ["body"], "notes": ["Intersects the specified body with the sketch plane and creates section curves"] },
+      "include_geometry": { "required": [], "notes": ["Includes geometry into the sketch without planar projection", "Supported selectors match project_geometry"] },
+      "project_to_surface": { "required": ["body", "face_index", "curve_index"], "notes": ["Projects selected sketch curves onto one or more target faces", "Use curve_index/curve_indices/curve_ref/curve_refs to select source sketch curves", "Use face_index or face_indices to select target faces on body", "projection_type accepts closest_point or along_vector", "For along_vector, supply direction_axis, direction_curve_index, or direction_curve_ref"] },
+      "redefine": { "required": [], "notes": ["Changes which plane or planar face the sketch is based on", "Use plane_name with XY, XZ, or YZ, or use body plus face_index to redefine onto a planar face"] },
+      "find_connected_curves": { "required": ["curve_index"], "notes": ["Finds end-connected sketch curves starting from the specified seed curve", "Useful before offset and chain-based operations", "curve_ref.curve_index is also accepted"] },
+      "offset": { "required": ["dist"], "notes": ["Use curve_indices/curve_refs to offset an explicit selection, or seed_curve_index/seed_curve_ref to auto-expand a connected chain using findConnectedCurves"] },
       "circular_pattern": { "required": ["cx", "cy", "count"] },
       "rectangular_pattern": { "required": ["count_x", "dist_x"] },
       "delete_curve": { "required": ["curve_index"], "notes": ["curve_ref.curve_index is also accepted"] },
       "move_entities": { "required": ["curve_indices", "dx", "dy"], "notes": ["curve_refs with curve_index are also accepted"] },
-      "copy_entities": { "required": ["curve_indices", "dx", "dy"], "notes": ["curve_refs with curve_index are also accepted"] },
+      "copy_entities": { "required": ["curve_indices", "dx", "dy"], "notes": ["curve_refs with window selection are also accepted"] },
       "mirror_entities": { "required": ["curve_indices", "mirror_curve_index"], "notes": ["curve_refs and mirror_curve_ref are also accepted; the mirror axis must be a sketch line"] },
       "set_construction": { "required": ["curve_index"], "notes": ["curve_ref.curve_index is also accepted"] },
       "trim": { "required": ["curve_index", "x", "y"], "notes": ["curve_ref.curve_index is also accepted"] },
       "clear_sketch": { "required": [] },
-      "add_constraint": { "required": ["type"] },
+      "add_constraint": { "required": ["type"], "notes": ["Use curve_index or curve_ref for single-curve constraints; use curve_indices or curve_refs for pair constraints", "Accepted type aliases: HorizontalConstraint, VerticalConstraint, ParallelConstraint, PerpendicularConstraint, CollinearConstraint, TangentConstraint, ConcentricConstraint"] },
       "remove_constraint": { "required": ["constraint_index"], "notes": ["constraint_ref.constraint_index is also accepted"] },
-      "add_dimension": { "required": ["type"] },
+      "add_dimension": { "required": ["type"], "notes": ["Use curve_index or curve_ref for single-curve dimensions; use curve_indices or curve_refs for pair dimensions", "Accepted type aliases: Distance, DistanceDimension, RadialDimension, DiameterDimension, AngularDimension"] },
       "set_dimension": { "required": ["dimension_index", "value"], "notes": ["dimension_ref.dimension_index is also accepted"] },
       "delete_dimension": { "required": ["dimension_index"], "notes": ["dimension_ref.dimension_index is also accepted"] }
     },
@@ -89,7 +108,9 @@
       "Use get_feature_history from analyze_design before edit_feature or delete_feature so the feature name comes from the actual timeline.",
       "Component-aware creation actions activate the resolved target component before creating bodies.",
       "If component_path is omitted for nested assemblies, primitive creation may fall back to the wrong active component.",
-      "Always provide semantic body names for new bodies. Avoid placeholders like Body1, Body2, or NewBody."
+      "Always provide semantic body names for new bodies. Avoid placeholders like Body1, Body2, or NewBody.",
+      "Length values are passed through in Fusion Design internal units. For distances, that means centimeters unless you convert before calling.",
+      "Angle values passed as plain numbers use Fusion internal angle units, which means radians."
     ],
     "actions": {
       "extrude": {
@@ -102,6 +123,22 @@
           "component_path": "Root/Bracket"
         }
       },
+      "create_hole": {
+        "required": ["body", "dia"],
+        "notes": ["Provide depth unless through_all is true", "Counterbore uses cb_dia and cb_depth", "Countersink uses cs_dia and cs_angle in radians when sent as a plain number"],
+        "example": { "action": "create_hole", "body": "BracketBody", "face_index": 0, "x": 1.5, "y": 1.5, "dia": 0.5, "depth": 1.2 }
+      },
+      "draft": {
+        "required": ["body", "face_index", "angle"],
+        "notes": ["angle is in radians when sent as a plain number", "pull_plane defaults to XY"],
+        "example": { "action": "draft", "body": "Housing", "face_index": 2, "angle": 0.0349, "pull_plane": "XY" }
+      },
+      "create_loft": { "required": ["sketch_names"], "notes": ["Advanced: centerline_sketch uses a single connected curve/path"], "example": { "action": "create_loft", "sketch_names": ["S1", "S2"], "centerline_sketch": "Path" } },
+      "create_sweep": { "required": ["profile_sketch", "path_sketch"], "notes": ["Advanced: taper, twist", "Angle values are radians when sent as plain numbers"], "example": { "action": "create_sweep", "profile_sketch": "Circle", "path_sketch": "Path", "taper": 0.0436 } },
+      "create_revolve": { "required": ["profile_sketch"], "notes": ["Advanced: axis, axis_sketch, angle", "Angle values are radians when sent as plain numbers"], "example": { "action": "create_revolve", "profile_sketch": "HalfCircle", "axis": "y", "angle": 3.1415 } },
+      "circular_pattern": { "required": ["body", "count"], "notes": ["axis defaults to Z", "total_angle is in radians when sent as a plain number"], "example": { "action": "circular_pattern", "body": "Boss1", "count": 6, "axis": "Z", "total_angle": 6.283185 } },
+      "rectangular_pattern": { "required": ["body", "count_x", "dist_x"], "notes": ["Optional second direction via count_y and dist_y", "axis_one defaults to X and axis_two defaults to Y"], "example": { "action": "rectangular_pattern", "body": "Rib1", "count_x": 4, "dist_x": 2.5, "count_y": 2, "dist_y": 8.0 } },
+      "path_pattern": { "required": ["body", "path_sketch", "count", "dist"], "notes": ["The path sketch should contain a single connected curve/path"], "example": { "action": "path_pattern", "body": "HoleBoss", "path_sketch": "PatternPath", "count": 5, "dist": 18.0 } },
       "fillet": { "required": ["body", "radius"] },
       "chamfer": { "required": ["body", "dist"] },
       "combine": { "required": ["target", "tools", "op"] },
@@ -109,8 +146,71 @@
       "create_cylinder": { "required": ["r", "h", "name"] },
       "delete_body": { "required": ["body"] },
       "rename_body": { "required": ["body", "new_name"] },
-      "move_body": { "required": ["body"] },
-      "move_body_absolute": { "required": ["body", "x", "y", "z"] },
+      "move_body": {
+        "required": ["body"],
+        "notes": ["Supports translation (x, y, z) and rotation (rx, ry, rz in radians) around center of mass"],
+        "example": { "action": "move_body", "body": "Body1", "x": 5, "rz": 0.785 }
+      },
+      "move_body_absolute": {
+        "required": ["body", "x", "y", "z"],
+        "notes": ["Supports optional rotation (rx, ry, rz in radians) after translation"],
+        "example": { "action": "move_body_absolute", "body": "Body1", "x": 10, "y": 0, "z": 5, "ry": 1.57 }
+      },
+      "execute_python": {
+        "required": ["script"],
+        "notes": ["Expert: Executes arbitrary Python code within a batch operation. Provides access to adsk, app, design, root, active_comp, params, and returnValue list."],
+        "example": { "action": "execute_python", "script": "returnValue.append(active_comp.name)" }
+      },
+      "pattern_feature": {
+        "required": ["feature_name", "count"],
+        "notes": ["Patterns a feature (e.g. Extrude, Hole) instead of a body. axis defaults to Z."],
+        "example": { "action": "pattern_feature", "feature_name": "Hole1", "count": 12, "axis": "Z" }
+      },
+      "rectangular_pattern_feature": {
+        "required": ["feature_name", "count_x", "dist_x"],
+        "notes": ["Rectangular pattern for a feature."],
+        "example": { "action": "rectangular_pattern_feature", "feature_name": "Hole1", "count_x": 5, "dist_x": 2.0 }
+      },
+      "mirror_feature": {
+        "required": ["feature_name"],
+        "notes": ["Mirrors a feature across a plane (XY, XZ, YZ). plane defaults to XY."],
+        "example": { "action": "mirror_feature", "feature_name": "Hole1", "plane": "XZ" }
+      },
+      "create_construction_plane": {
+        "required": [],
+        "notes": ["plane_type can be 'offset' (needs base_plane and offset) or 'angle' (needs axis and angle in radians)."],
+        "example": { "action": "create_construction_plane", "plane_type": "offset", "base_plane": "XY", "offset": 5.0 }
+      },
+      "create_construction_axis": {
+        "required": [],
+        "notes": ["axis_type can be 'two_point' (needs x1,y1,z1 and x2,y2,z2) or 'cylinder' (needs body and face_index)."],
+        "example": { "action": "create_construction_axis", "axis_type": "cylinder", "body": "Cylinder1", "face_index": 0 }
+      },
+      "create_thread": {
+        "required": ["body"],
+        "notes": ["Creates a thread on a cylindrical face. Optional: face_index (default 0), thread_type, size, designation, thread_class, is_modeled."],
+        "example": { "action": "create_thread", "body": "Stem", "is_modeled": true }
+      },
+      "create_coil": {
+        "required": ["dia", "height", "pitch"],
+        "notes": ["Creates a coil/helix. Optional: x, y, z (center), op (NewBody/Join/Cut)."],
+        "example": { "action": "create_coil", "dia": 2.0, "height": 10.0, "pitch": 2.0 }
+      },
+      "select_by_property": {
+        "required": ["body", "property"],
+        "notes": ["property can be 'area' or 'length'. Returns matching indices. Use min_val and max_val to filter."],
+        "example": { "action": "select_by_property", "body": "Body1", "property": "area", "min_val": 0, "max_val": 5.0 }
+      },
+      "align_to_normal": {
+        "required": ["body", "target_body"],
+        "notes": ["Aligns 'body' to the normal of 'target_body' at 'face_index'. align_axis specifies which axis of 'body' points along the normal (X, Y, or Z)."],
+        "example": { "action": "align_to_normal", "body": "Seed", "target_body": "Head", "face_index": 42, "align_axis": "Z" }
+      },
+      "apply_taper_to_extrude": {
+        "required": ["feature_name", "taper"],
+        "notes": ["Applies a taper angle (in radians) to an existing Extrude feature."],
+        "example": { "action": "apply_taper_to_extrude", "feature_name": "StemExtrude", "taper": 0.05 }
+      },
       "scale_body": { "required": ["body", "factor"] },
       "shell": { "required": ["body", "thick"] },
       "split_body": { "required": ["body", "tool"] },
@@ -171,6 +271,24 @@
           "component1_path": "Root/Frame/Base",
           "component2_path": "Root/Frame/Arm",
           "type": "Rigid"
+        }
+      },
+      "create_as_built_joint": {
+        "required": ["action", "type"],
+        "notes": ["Creates a joint between parts already in position"],
+        "example": {
+          "action": "create_as_built_joint",
+          "component1_path": "Root/Fuselage",
+          "component2_path": "Root/Cockpit",
+          "type": "Rigid"
+        }
+      },
+      "set_contact_sets": {
+        "required": ["action", "enable"],
+        "notes": ["Enables/disables physical collision simulation"],
+        "example": {
+          "action": "set_contact_sets",
+          "enable": true
         }
       }
     }
@@ -257,5 +375,17 @@
   "export_model": {
     "when_to_use": "Use only after the design is in the desired final state.",
     "example": { "format": "step", "filename": "assembly_export" }
+  },
+  "execute_python_script": {
+    "when_to_use": "Expert: Use to execute complex modeling logic directly in Fusion 360 using the Python API. Best for loops, mathematical patterns, or operations not exposed via standard tools.",
+    "rules": [
+      "The script has access to 'adsk', 'app', 'design', 'root', 'active_comp', and 'params'.",
+      "Store results to be returned in the 'returnValue' list (e.g. returnValue.append('Success')).",
+      "Use this tool sparingly and prefer standard tools when possible for better traceability."
+    ],
+    "example": {
+      "script": "for i in range(5):\n  active_comp.name = f'Comp_{i}'\nreturnValue.append('Renamed')",
+      "params": {}
+    }
   }
 }

@@ -39,8 +39,8 @@ def _handle_assembly_batch_result(val: str, lang: str):
 def edit_assembly_logic(operations: list[dict], lang: str = "en"):
     """
     Executes multiple assembly operations in a single batch.
-    Supported actions: create_component, create_joint, rename_component,
-    delete_component, move_component.
+    Supported actions: create_component, create_joint, create_as_built_joint,
+    set_contact_sets, rename_component, delete_component, move_component.
     Component references should prefer component_path over plain names for nested assemblies.
     Each operation should be a dict with 'action' and required parameters.
     """

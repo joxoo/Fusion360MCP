@@ -105,6 +105,36 @@ class TestApiProfiles(unittest.TestCase):
         self.assertIn("clear_sketch", guide["actions"])
         self.assertEqual(guide["actions"]["draw_arc"]["required"], ["cx", "cy", "sx", "sy", "angle"])
         self.assertIn("semantic and stable", " ".join(guide["rules"]))
+        self.assertEqual(guide["actions"]["draw_text"]["required"], ["text", "x", "y"])
+        self.assertEqual(guide["actions"]["draw_center_rectangle"]["required"], ["cx", "cy", "x", "y"])
+        self.assertEqual(
+            guide["actions"]["draw_three_point_rectangle"]["required"],
+            ["x1", "y1", "x2", "y2", "x3", "y3"],
+        )
+        self.assertEqual(
+            guide["actions"]["draw_overall_slot"]["required"],
+            ["x1", "y1", "x2", "y2", "width"],
+        )
+        self.assertEqual(
+            guide["actions"]["draw_center_point_slot"]["required"],
+            ["cx", "cy", "x", "y", "width"],
+        )
+        self.assertEqual(
+            guide["actions"]["draw_edge_polygon"]["required"],
+            ["x1", "y1", "x2", "y2", "sides"],
+        )
+        self.assertIn("project_cut_edges", guide["actions"])
+        self.assertIn("include_geometry", guide["actions"])
+        self.assertIn("project_to_surface", guide["actions"])
+        self.assertIn("redefine", guide["actions"])
+        self.assertIn("find_connected_curves", guide["actions"])
+        self.assertIn("createSpunProfileInput", " ".join(guide["actions"]["create_spun_profile"]["notes"]))
+        self.assertIn("axis_curve_index", " ".join(guide["actions"]["create_spun_profile"]["notes"]))
+        self.assertIn("axis_edge_index", " ".join(guide["actions"]["create_spun_profile"]["notes"]))
+        self.assertIn("center-to-center slot", " ".join(guide["actions"]["draw_slot"]["notes"]))
+        self.assertIn("end arcs", " ".join(guide["actions"]["draw_slot"]["notes"]))
+        self.assertIn("project2", " ".join(guide["actions"]["project_geometry"]["notes"]))
+        self.assertIn("seed_curve_index", " ".join(guide["actions"]["offset"]["notes"]))
 
     def test_describe_tool_actions_geometry_and_assembly_include_corrective_actions(self):
         geometry_payload = json.loads(describe_tool_actions_logic("apply_3d_features"))
