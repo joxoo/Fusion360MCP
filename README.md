@@ -1,4 +1,4 @@
-# FusionMCP (v9.3.0)
+# FusionMCP (v9.4.0)
 
 FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It enables AI agents to interact directly with the Fusion 360 API to perform complex design, geometry, and mechanical engineering tasks.
 
@@ -13,12 +13,13 @@ FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It e
 
 ## Recent Changes
 
-- Added API profiles: `compact` is now the default public surface, `full` keeps the complete internal toolset.
-- `export_model(format="stl|f3d|step", filename=...)` is now the single exposed export tool.
-- `apply_3d_features` accepts `height` aliases for `Box` and `Cylinder`, and `center` aliases for `Cylinder`.
-- `manage_design(action="restart_mcp")` now performs a real MCP restart instead of reusing the previous healthy process.
-- Stopping the Fusion add-in now also stops the MCP child process.
-- `create_bolt` uses a more robust cylindrical face selection for thread creation.
+- `edit_sketch` now exposes a much broader compact sketch API: text, richer rectangle/polygon/slot variants, SVG import, spun profiles, projection/include helpers, sketch redefine, and connected-curve discovery.
+- `apply_3d_features` now exposes a much broader compact solid-modeling API: `create_hole`, `draft`, loft/sweep/revolve, solid patterns, feature patterns, construction helpers, thread/coil helpers, body correction actions, and more corrective feature operations.
+- `edit_assembly` now includes `rename_component`, `delete_component`, `move_component`, `create_as_built_joint`, and `set_contact_sets`.
+- `analyze_design` now includes `get_feature_history`, `interference_check`, `capture_view`, and `capture_side`.
+- `execute_python_script` is now part of the public compact API for expert-level direct Fusion Python workflows.
+- Compact tool guidance was expanded substantially so AI clients can use the public API with clearer action-specific parameter contracts.
+- Sketch batch execution now handles slot creation, projection paths, dimensions, constraints, and error reporting more robustly against current Fusion API behavior.
 
 ## Installation
 

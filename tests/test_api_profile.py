@@ -31,6 +31,7 @@ class TestApiProfiles(unittest.TestCase):
                 "import_mesh",
                 "edit_mesh",
                 "export_model",
+                "execute_python_script",
             ],
         )
 
