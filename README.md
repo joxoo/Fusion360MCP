@@ -27,6 +27,10 @@ FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It e
 2. **Add-In Setup**: Copy this `FusionMCP` folder into your Fusion 360 Add-Ins directory.
    - macOS: `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/`
    - Windows: `%appdata%\Autodesk\Autodesk Fusion 360\API\AddIns\`
+   - Windows installer for end users: build and distribute `installer/windows/FusionMCP.iss` as a normal Setup EXE
+   - Windows script-based install for developers: run `scripts\install_windows.cmd` or `powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1`
+   - CI build: `.github/workflows/build-windows-installer.yml` creates the Windows Setup EXE on GitHub Actions and uploads it as an artifact
+   - Release build: `.github/workflows/release-windows-installer.yml` builds the same installer for Git tags / GitHub releases and attaches it to the release
 3. **Dependencies**: The add-in uses `uv` to manage its own environment, but you can manually install requirements if needed:
    ```bash
    pip install -r requirements.txt

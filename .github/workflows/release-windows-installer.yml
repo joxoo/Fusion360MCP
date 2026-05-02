@@ -1,0 +1,59 @@
+name: Release Windows Installer
+
+on:
+  release:
+    types:
+      - published
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-and-release-installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read add-in version from manifest
+        id: version
+        shell: powershell
+        run: |
+          $manifest = Get-Content "$env:GITHUB_WORKSPACE\FusionMCP.manifest" -Raw | ConvertFrom-Json
+          $version = [string]$manifest.version
+          if (-not $version) {
+            throw "No version found in FusionMCP.manifest"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        shell: powershell
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found at $iscc"
+          }
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.version }}" "$env:GITHUB_WORKSPACE\installer\windows\FusionMCP.iss"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FusionMCP-Windows-Installer-Release-${{ steps.version.outputs.version }}
+          path: installer/windows/output/FusionMCP-Setup-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Attach installer to GitHub release
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/windows/output/FusionMCP-Setup-${{ steps.version.outputs.version }}.exe
+          fail_on_unmatched_files: true

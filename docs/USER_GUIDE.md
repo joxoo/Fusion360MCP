@@ -103,6 +103,29 @@ Obwohl die Befehle Englisch sind, antwortet der Server basierend auf der Nutzers
 Das Plugin muss im Fusion 360 Add-In Verzeichnis liegen:
 `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/FusionMCP`
 
+Für Windows liegt das Zielverzeichnis standardmäßig unter:
+`%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\FusionMCP`
+
+Für Endnutzer ohne Script-Ausführung gibt es jetzt zusätzlich einen normalen Windows-Installer auf Basis von Inno Setup:
+
+`installer/windows/FusionMCP.iss`
+
+Daraus kann eine klassische `Setup.exe` gebaut und verteilt werden.
+
+Zusätzlich gibt es weiterhin eine Script-basierte Installationsroutine im Repo:
+
+```powershell
+.\scripts\install_windows.cmd
+```
+
+oder direkt:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
+```
+
+Die Routine kopiert das Add-In nach `%APPDATA%` und lässt Entwicklungsartefakte wie `.git`, `.venv`, `tests` und `__pycache__` aus.
+
 ### 4.2 Neustart
 Nach Code-Änderungen oder bei Session-Problemen muss das Add-In in Fusion 360:
 1.  Über das Menü "Utilities" -> "Add-Ins" gestoppt werden.
