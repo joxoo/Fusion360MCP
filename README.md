@@ -2,6 +2,11 @@
 
 FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It enables AI agents to interact directly with the Fusion 360 API to perform complex design, geometry, and mechanical engineering tasks.
 
+## Download
+
+- **Latest Windows installer**: [Download from GitHub Releases](https://github.com/joxoo/Fusion360MCP/releases/latest)
+- **All releases**: [View release history](https://github.com/joxoo/Fusion360MCP/releases)
+
 ## Features
 
 - **Bridge Integration**: A Fusion 360 add-in that bridges external requests to the Fusion 360 main UI thread.
@@ -27,7 +32,8 @@ FusionMCP is a Model Context Protocol (MCP) server for Autodesk Fusion 360. It e
 2. **Add-In Setup**: Copy this `FusionMCP` folder into your Fusion 360 Add-Ins directory.
    - macOS: `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/`
    - Windows: `%appdata%\Autodesk\Autodesk Fusion 360\API\AddIns\`
-   - Windows installer for end users: build and distribute `installer/windows/FusionMCP.iss` as a normal Setup EXE
+   - Windows installer for end users: download the latest installer from [GitHub Releases](https://github.com/joxoo/Fusion360MCP/releases/latest)
+   - Direct release page: [All releases](https://github.com/joxoo/Fusion360MCP/releases)
    - Windows script-based install for developers: run `scripts\install_windows.cmd` or `powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1`
    - CI build: `.github/workflows/build-windows-installer.yml` creates the Windows Setup EXE on GitHub Actions and uploads it as an artifact
    - Release build: `.github/workflows/release-windows-installer.yml` builds the same installer for Git tags / GitHub releases and attaches it to the release
